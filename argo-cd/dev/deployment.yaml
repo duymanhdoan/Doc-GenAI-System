@@ -4,7 +4,7 @@ metadata:
   name: mydeployment
   namespace: myapp
 spec:
-  replicas: 2
+  replicas: 3
   selector:
     matchLabels:
       app: mypod # the deployment manage all pods with labels matching mypod
