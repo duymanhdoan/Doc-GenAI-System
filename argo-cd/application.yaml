@@ -5,13 +5,13 @@ metadata:
   namespace: argocd
 spec:
   project: default
-  
+
   source:
     repoURL: https://github.com/duymanhdoan/github-workflow-sample.git
     targetRevision: HEAD
     path: argo-cd/dev
   destination:
-    server: https://argocd-server.default.svc
+    server: https://kubernetes.default.svc
     namespace: myapp 
 
   syncPolicy: 
