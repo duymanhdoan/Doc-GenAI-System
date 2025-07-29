@@ -8,9 +8,9 @@
       # Refer to https://cloud.google.com/compute/docs/images/os-details#ubuntu_lts
       # or use the command `gcloud compute images list --project=ubuntu-os-cloud`
       zone: asia-southeast1-b	
-      project: vital-orb-466100-c5
+      project: project_id
       auth_kind: serviceaccount
-      service_account_file: ../secrets/vital-orb-466100-c5-3cc82528e5df.json
+      service_account_file: ../secrets/
       disks:
         - auto_delete: true # Aute delete when destroying the VM
           boot: true # This disk is used for booting
