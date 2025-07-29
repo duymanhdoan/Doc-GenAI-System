@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://github.com/duymanhdoan/github-workflow-sample.git
     targetRevision: HEAD
-    path: argo-cd/dev
+    path: https://github.com/duymanhdoan/github-workflow-sample/tree/dev/iac-cd/argo-cd/dev
   destination:
     server: https://kubernetes.default.svc
     namespace: myapp 
