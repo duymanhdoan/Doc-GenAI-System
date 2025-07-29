@@ -5,10 +5,19 @@ metadata:
   namespace: argocd
 spec:
   project: default
+  
   source:
-    repoURL: https://github.com/argoproj/argocd-example-apps.git
+    repoURL: https://github.com/duymanhdoan/github-workflow-sample.git
     targetRevision: HEAD
-    path: guestbook
+    path: argo-cd/dev
   destination:
-    server: https://kubernetes.default.svc
-    namespace: guestbook
+    server: https://argocd-server.default.svc
+    namespace: myapp 
+
+  syncPolicy: 
+    syncOptions: 
+    - CreateNamespace=true 
+
+    automated: 
+      selfHeal: true 
+      prune: true  
