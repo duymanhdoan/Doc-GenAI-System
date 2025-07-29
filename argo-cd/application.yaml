@@ -8,8 +8,9 @@ spec:
 
   source:
     repoURL: https://github.com/duymanhdoan/github-workflow-sample.git
-    targetRevision: HEAD
-    path: https://github.com/duymanhdoan/github-workflow-sample/tree/dev/iac-cd/argo-cd/dev
+    targetRevision: dev/iac-cd  # ✅ Chỉ định branch
+    path: argo-cd/dev           # ✅ Relative path từ repo root
+  
   destination:
     server: https://kubernetes.default.svc
     namespace: myapp 
