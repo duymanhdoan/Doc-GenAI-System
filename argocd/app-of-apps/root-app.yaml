@@ -15,7 +15,7 @@ spec:
   
   destination:
     server: https://kubernetes.default.svc
-    namespace: model-serving
+    namespace: argocd  # ✅ FIXED - App-of-Apps phải tạo Applications trong argocd namespace
   
   syncPolicy: 
     syncOptions: 
@@ -23,4 +23,4 @@ spec:
 
     automated: 
       selfHeal: true 
-      prune: true 
+      prune: true

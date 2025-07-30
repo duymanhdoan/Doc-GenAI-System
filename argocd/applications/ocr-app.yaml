@@ -17,7 +17,7 @@ spec:
         - values.yaml
   destination:
     server: https://kubernetes.default.svc
-    namespace: model-serving
+    namespace: model-serving  # ✅ ĐÚNG - deploy ứng dụng vào model-serving
 
   syncPolicy: 
     syncOptions: 
@@ -25,4 +25,4 @@ spec:
 
     automated: 
       selfHeal: true 
-      prune: true 
+      prune: true
