@@ -1,5 +1,5 @@
 global:
-  repoURL: "https://github.com/duymanhdoan/Doc-GenAI-System.git"
+  repoURL: https://github.com/duymanhdoan/Doc-GenAI-System.git
   targetRevision: "dev/argocd"
   destinationServer: "https://kubernetes.default.svc"
 

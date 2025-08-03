@@ -34,7 +34,7 @@ readinessProbe:
   timeoutSeconds: 5
   failureThreshold: 3
 podMonitor:
-  enabled: true
+  enabled: false
   labels:
     release: prometheus
   interval: 15s
