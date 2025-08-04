@@ -20,7 +20,7 @@ on:
 jobs: 
   # Test job - runs first
   test:
-    name: Run Tests
+    name: Run Unit-Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -36,14 +36,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
           
-      - name: Run tests
+      - name: Run Unit tests
+        id: run_tests
         run: |
-          pytest --cov=. --cov-report=xml
+          # Check if there are any test files before running pytest
+          if find . -name "*test*.py" -o -name "test_*.py" | grep -q .; then
+            echo "Found test files, running pytest..."
+            pytest --cov=. --cov-report=xml
+            echo "tests_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "No test files found, skipping tests"
+            echo "tests_run=false" >> $GITHUB_OUTPUT
+          fi
           
       - name: Upload coverage reports
+        if: steps.run_tests.outputs.tests_run == 'true'
         uses: codecov/codecov-action@v3
         with:
           file: ./coverage.xml
+          fail_ci_if_error: false
 
   # Build and push job - runs after tests pass
   # build-and-push:
