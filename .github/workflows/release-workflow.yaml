@@ -103,30 +103,68 @@ jobs:
           push: true
           tags: |
             ${{ env.DOCKER_USERNAME_REPO }}/${{ env.DOCKER_IMAGE_NAME }}:${{env.VERSION_TAG }}
-          #   ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
-          # cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:buildcache
-          # cache-to: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:buildcache,mode=max
-          
+
       - name: Print Images Name
         run: |     
           echo "tags: ${{ env.DOCKER_USERNAME_REPO }}/${{ env.DOCKER_IMAGE_NAME }}:${{env.VERSION_TAG }}"
 
+
+  # update-helm-values:
+  #   name: Update Helm Values
+  #   needs: build-and-push
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     CHART_FILE: deployments/helm-charts/fraud-detection/Chart.yaml
+  #     VALUE_FILE: deployments/helm-charts/fraud-detection/values.yaml
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #       with:
+  #         ref: "${{ github.head_ref || github.ref_name }}"
+  #         fetch-depth: 0 # important for PR creation
+
+  #     - name: Set up Git config
+  #       run: |
+  #         git config user.name "github-actions[bot]"
+  #         git config user.email "github-actions[bot]@users.noreply.github.com"
+
+  #     - name: Install yq
+  #       run: |
+  #         sudo wget https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64 -O /usr/bin/yq
+  #         sudo chmod +x /usr/bin/yq
+
+  #     - name: Update Chart.yaml & values.yaml with version
+  #       run: |
+  #         VERSION="v${{ needs.build-and-push.outputs.version }}"
+  #         IMAGE="${{ needs.build-and-push.outputs.image }}"
+
+  #         yq eval ".version = \"${VERSION#v}\" |
+  #                  .appVersion = \"${VERSION#v}\"" \
+  #                  -i "$CHART_FILE"
+
+  #         yq eval ".image.repository = \"$IMAGE\" |
+  #                  .image.tag = \"$VERSION\"" \
+  #                  -i "$VALUE_FILE"
+
+  #         git add "$CHART_FILE" "$VALUE_FILE"
+  #         git commit -m "ci: update Helm values.yaml and Chart.yaml to $IMAGE:$VERSION"
+  #         git push origin HEAD
+
+
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
-    # needs: build-and-push
+    needs: build-and-push
     if: github.event_name != 'pull_request'
-    steps: 
-      - run: echo "🎉 The last job Security Scan was finished!"
-    # steps:
-    #   - name: Run Trivy vulnerability scanner
-    #     uses: aquasecurity/trivy-action@master
-    #     with:
-    #       image-ref: '${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest'
-    #       format: 'sarif'
-    #       output: 'trivy-results.sarif'
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.DOCKER_USERNAME_REPO }}/${{ env.DOCKER_IMAGE_NAME }}:latest'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
 
-    #   - name: Upload Trivy scan results to GitHub Security tab
-    #     uses: github  /codeql-action/upload-sarif@v2
-    #     with:
-    #       sarif_file: 'trivy-results.sarif'
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github  /codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
