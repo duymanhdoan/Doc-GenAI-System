@@ -35,8 +35,8 @@ applications:
 
   fraud-detection:
     enabled: true
-    destinationNamespace: argo-cd
-    path: helm-charts/fraud-detection/
+    destinationNamespace: myapp
+    path: helm-charts/fraud-detection/templates
     valuesFile: argo-apps/values/fraud-detection.yaml
 
   # traefik:
@@ -57,5 +57,5 @@ cloud:
   # repoURL: "https://github.com/phuchoang2603/k8s-deploy.git"
   # targetRevision: "master"
   # path: argo-apps/cloud
-  path: argo-apps/values/cloud
+  path: helm-charts/fraud-detection/templates
   destinationNamespace: default
