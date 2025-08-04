@@ -3,7 +3,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: cloud
-  namespace: argo-cd
+  namespace: argocd
 spec:
   project: default
   destination:
@@ -15,5 +15,5 @@ spec:
     targetRevision: {{ default .Values.global.targetRevision .Values.cloud.targetRevision | quote }}
   syncPolicy:
     automated: { prune: true, selfHeal: true }
-    syncOptions: [ServerSideApply=true]
+    syncOptions: [ServerSideApply=true, CreateNamespace=true]
 {{- end }}

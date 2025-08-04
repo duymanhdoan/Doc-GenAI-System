@@ -57,5 +57,5 @@ cloud:
   # repoURL: "https://github.com/phuchoang2603/k8s-deploy.git"
   # targetRevision: "master"
   # path: argo-apps/cloud
-  path: helm-charts/fraud-detection/templates
-  destinationNamespace: default
+  path: helm-charts/fraud-detection
+  destinationNamespace: argo-cd
