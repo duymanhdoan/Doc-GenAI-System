@@ -36,7 +36,7 @@ applications:
   fraud-detection:
     enabled: true
     destinationNamespace: myapp
-    path: helm-charts/fraud-detection/templates
+    path: helm-charts/fraud-detection
     valuesFile: argo-apps/values/fraud-detection.yaml
 
   # traefik:
