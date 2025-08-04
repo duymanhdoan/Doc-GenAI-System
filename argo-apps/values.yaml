@@ -1,7 +1,7 @@
 global:
   repoURL: https://github.com/duymanhdoan/Doc-GenAI-System.git
-  targetRevision: "dev/argocd"
-  destinationServer: "https://kubernetes.default.svc"
+  targetRevision: dev/argocd
+  destinationServer: https://kubernetes.default.svc
 
 applications:
   # loki:
@@ -35,8 +35,8 @@ applications:
 
   fraud-detection:
     enabled: true
-    destinationNamespace: model-serving
-    path: helm-charts/fraud-detection
+    destinationNamespace: argo-cd
+    path: helm-charts/fraud-detection/
     valuesFile: argo-apps/values/fraud-detection.yaml
 
   # traefik:
