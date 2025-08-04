@@ -107,7 +107,7 @@ jobs:
           # cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:buildcache
           # cache-to: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:buildcache,mode=max
           
-      - name: Verify Images Tags 
+      - name: Print Images Name
         run: |     
           echo "tags: ${{ env.DOCKER_USERNAME_REPO }}/${{ env.DOCKER_IMAGE_NAME }}:${{env.VERSION_TAG }}"
 
