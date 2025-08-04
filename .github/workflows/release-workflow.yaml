@@ -73,38 +73,27 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
-      - name: Generate version from git
-        id: get_version
+ 
+      - name: Extract version from pyproject.toml
+        id: version
         run: |
-          # Use git tag or commit SHA for versioning
-          if git describe --tags --exact-match 2>/dev/null; then
-            VERSION=$(git describe --tags --exact-match)
-          else
-            VERSION="sha-$(git rev-parse --short HEAD)"
-          fi
+          VERSION=$(grep -Po '(?<=^version = ")[^"]+' pyproject.toml)
+          echo "VERSION=$VERSION"
+          echo "VERSION_TAG=v$VERSION" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Generated version: $VERSION"
-        
+          echo "IMAGE=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}" >> $GITHUB_OUTPUT
+          
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
           registry: ${{ env.DOCKER_REGISTRY }}
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
-        with:
-          images: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Docker image
+            
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+            
+      - name: Build & push Docker Image to DockerHub
         id: buid_and_push
         uses: docker/setup-buildx-action@v3
         with:
@@ -112,24 +101,16 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }}
+            ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:v${{env.VERSION_TAG }}
             ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
           cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:buildcache,mode=max
-
+          
       - name: Verify Images Tags 
         run: |     
-          echo "tags: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }},${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest"
+          echo "tags: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:v${{env.VERSION_TAG }}"
+          echo "tags: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest"
 
-      # - name: Generate artifact attestation
-      #   uses: actions/attest-build-provenance@v2
-      #   with:
-      #     # ✅ Fixed: Use correct registry format
-      #     subject-name: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}
-      #     subject-digest: ${{ steps.push.outputs.digest }}
-      #     push-to-registry: true
-
-  # Optional: Security scanning
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
