@@ -41,6 +41,9 @@ jobs:
         run: |
           if git rev-parse origin/dev/workflow >/dev/null 2>&1; then
             DIFF=$(git diff -U0 origin/dev/workflow -- pyproject.toml)
+            NEW_VERSION=$(echo "$DIFF" | grep -E '^+\s*version\s*=' | sed -E 's/^\+\s*version\s*=\s*["\']([^"\']+)["\'].*/\1/')
+            echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            echo "New version detected: $NEW_VERSION (should_skip=false)
           else
             DIFF=$(git show HEAD:pyproject.toml)
             echo "Nothing to changed."
@@ -51,7 +54,7 @@ jobs:
             echo "New version change: should_skip=false"
           else
             echo "should_skip=true" >> $GITHUB_OUTPUT
-            echo "No version change found. should_skip=true"
+            echo "No version change found, Skipp all remaining Jobs."
           fi
 
   unit-test:
