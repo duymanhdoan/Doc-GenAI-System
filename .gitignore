@@ -6,13 +6,6 @@ __pycache__/
 # C extensions
 *.so
 
-<<<<<<< HEAD
-=======
-
-# github action workflows 
-.github/workflows/github-actions-demo.yml
-
->>>>>>> main
 # Distribution / packaging
 .Python
 build/
@@ -43,6 +36,9 @@ MANIFEST
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
+
+#Trash folder and files 
+bin-file/ 
 
 # Unit test / coverage reports
 htmlcov/

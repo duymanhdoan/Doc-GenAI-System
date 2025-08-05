@@ -1,5 +1,0 @@
-[servers_1]
-35.198.246.143 ansible_ssh_private_key_file=/home/duymd/.ssh/id_ed25519
-
-[servers_2]
-35.240.215.176 ansible_ssh_private_key_file=/home/duymd/.ssh/id_ed25519

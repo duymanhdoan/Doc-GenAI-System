@@ -1,4 +1,0 @@
-image:
-  repository: manhduyatsd/houre-price-prediction
-  tag: "0.0.1"
-  pullPolicy: Always
