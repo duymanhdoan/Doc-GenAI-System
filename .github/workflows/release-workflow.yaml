@@ -257,15 +257,9 @@ jobs:
           - Updated image tag to $VERSION_TAG"
 
           # Stage and commit changes
-          # git add "${{ env.CHART_FILE }}" "${{ env.VALUES_FILE }}"
-          # git commit -m "ci: update Helm chart to $IMAGE_WITH_TAG
-          
-          # - Updated chart version to ${{ needs.version-check.outputs.version }}
-          # - Updated app version to ${{ needs.version-check.outputs.version }}
-          # - Updated image tag to $VERSION_TAG"
-          
-          # # Push changes
-          # git push origin ${{ github.ref_name }}
+          git add "${{ env.CHART_FILE }}" "${{ env.VALUES_FILE }}"
+          git commit -m "ci/cd: update Helm chart to $IMAGE_WITH_TAG"
+          git push origin ${{ github.ref_name }}
           
           echo "✅ Successfully updated and pushed Helm chart changes"
 
