@@ -1,4 +1,4 @@
-## How-to Guide
+## How-to Guide Deploy code ANSIBLE
 ### 1. Install prerequisites
 ```shell
 pip install -r requirements.txt
@@ -35,3 +35,21 @@ After your instance has been started as the folowing image, get the External IP 
     ansible-playbook -i ../inventory install_and_run_docker.yml
     ```
 , now, you should be able to access your application via `http://104.198.109.131:30000/docs`
+
+
+## How-to Guide Deploy code TERRAFORM 
+### Install Terraform for Ubuntu 22.04
+https://computingforgeeks.com/how-to-install-terraform-on-ubuntu/
+
+## How-to Guide
+Authenticate with GCP
+```shell
+gcloud auth application-default login
+```
+
+## Provision a new cluster
+```shell
+terraform init
+terraform plan
+terraform apply
+```

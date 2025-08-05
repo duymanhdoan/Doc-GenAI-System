@@ -1,205 +1,290 @@
-env:
-  DOCKER_IMAGE_NAME: mydoc-ai-system
-  DOCKER_REGISTRY: docker.io
-  DOCKER_USERNAME_REPO: manhduyatsd
-
-name: Test, Build and Push Docker Image to DockerHub 
+name: CI/CD Pipeline - Test, Build & Update Helm Charts. 
 
 on:
-  # Trigger manually from UI
   workflow_dispatch:
-  # Trigger on push to specific branches
   push:
     branches:
-      - 'dev/workflow'
+      - 'dev/argocd'
       - 'main'
-  # # Trigger on pull requests for testing
-  # pull_request:
-  #   branches:
-  #     - 'main'
-  # Test job - runs first
+  pull_request:
+    branches:
+      - 'main'
+      - 'dev/argocd'
+
+env:
+  # Docker Configuration
+  DOCKER_REGISTRY: docker.io
+  DOCKER_USERNAME: manhduyatsd  # Renamed for clarity
+  DOCKER_IMAGE_NAME: mydoc-ai-system
+  
+  # Helm Configuration
+  HELM_CHART_PATH: helm-charts/fraud-detection
+  CHART_FILE: helm-charts/fraud-detection/Chart.yaml
+  VALUES_FILE: helm-charts/fraud-detection/values.yaml
+  
+  # Python Configuration
+  PYTHON_VERSION: "3.9"
+
 jobs:
-  check-version:
-    name: Check Update New Version
+  # ==========================================
+  # VERSION CHECK JOB
+  # ==========================================
+  version-check:
+    name: Check Version Changes
     runs-on: ubuntu-latest
     outputs:
-      should_skip: ${{ steps.check.outputs.should_skip }}
+      should_skip: ${{ steps.version-check.outputs.should_skip }}
+      version: ${{ steps.version-check.outputs.version }}
+      version_tag: ${{ steps.version-check.outputs.version_tag }}
+      full_image_name: ${{ steps.version-check.outputs.full_image_name }}
+    
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need previous commit for comparison
 
-      - name: Check if pyproject.toml version changed
-        id: check
+      - name: Check Version Changes
+        id: version-check
         run: |
-          if git rev-parse origin/dev/workflow^ >/dev/null 2>&1; then
-            DIFF=$(git diff -U0 origin/dev/workflow^ -- pyproject.toml)
+          # Extract current version from pyproject.toml
+          CURRENT_VERSION=$(grep -Po '(?<=^version = ")[^"]+' pyproject.toml)
+          VERSION_TAG="v${CURRENT_VERSION}"
+          FULL_IMAGE_NAME="${DOCKER_REGISTRY}/${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}"
+          
+          echo "Current version: $CURRENT_VERSION"
+          echo "Version tag: $VERSION_TAG"
+          echo "Full image name: $FULL_IMAGE_NAME"
+          
+          # Check if version changed (compare with previous commit)
+          if git show HEAD~1:pyproject.toml >/dev/null 2>&1; then
+            PREV_VERSION=$(git show HEAD~1:pyproject.toml | grep -Po '(?<=^version = ")[^"]+' || echo "")
+            
+            if [[ "$CURRENT_VERSION" != "$PREV_VERSION" && -n "$PREV_VERSION" ]]; then
+              echo "Version changed from $PREV_VERSION to $CURRENT_VERSION"
+              echo "should_skip=false" >> $GITHUB_OUTPUT
+            else
+              echo "No version change detected. Skipping build and deployment."
+              echo "should_skip=true" >> $GITHUB_OUTPUT
+            fi
           else
-            DIFF=$(git show HEAD:pyproject.toml)
-          fi
-
-          echo "DIFF=$DIFF"
-
-          if echo "$DIFF" | grep -E '^+\s*version\s*=' >/dev/null; then
-            NEW_VERSION=$(echo "$DIFF" | grep -E '^+\s*version\s*=')
+            # First commit or no previous version found
+            echo "No previous version found. Proceeding with build."
             echo "should_skip=false" >> $GITHUB_OUTPUT
-            echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-            echo "New version detected: $NEW_VERSION"
-          else
-            echo "should_skip=true" >> $GITHUB_OUTPUT
-            echo "No version change found, Skip all remaining jobs."
           fi
+          
+          # Set outputs
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "version_tag=$VERSION_TAG" >> $GITHUB_OUTPUT
+          echo "full_image_name=$FULL_IMAGE_NAME" >> $GITHUB_OUTPUT
 
-  unit-test:
+  # ==========================================
+  # TESTING JOB
+  # ==========================================
+  unit-tests:
     name: Run Unit Tests
     runs-on: ubuntu-latest
-    needs: check-version
-    if: github.event_name != 'pull_request' && needs.check-version.outputs.should_skip != 'true'
+    needs: version-check
+    if: needs.version-check.outputs.should_skip != 'true'
+    
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
         
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
           
-      - name: Install Dependencies Environment for Run Unit Tests
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          # Install project in editable mode
           pip install -e .
           
-      - name: Execute All Unit tests
-        id: run_tests
+      - name: Run Tests
+        id: run-tests
         run: |
-          # Check if there are any test files before running pytest
+          # Check for test files
           if find . -name "*test*.py" -o -name "test_*.py" | grep -q .; then
-            echo "Found test files, running pytest..."
-            pytest --cov=. --cov-report=xml
-            echo "tests_run=true" >> $GITHUB_OUTPUT
+            echo "Running pytest with coverage..."
+            pytest --cov=. --cov-report=xml --cov-report=term
+            echo "tests_executed=true" >> $GITHUB_OUTPUT
           else
-            echo "No test files found, skipping tests"
-            echo "tests_run=false" >> $GITHUB_OUTPUT
-          fi     
+            echo "No test files found. Skipping tests."
+            echo "tests_executed=false" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Upload report as artifacts to Codecov
-        if: steps.run_tests.outputs.tests_run == 'true'
+      - name: Upload Coverage to Codecov
+        if: steps.run-tests.outputs.tests_executed == 'true'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: coverage.xml
           fail_ci_if_error: false
 
-
-
-
-
-  # Build and push job - runs after tests pass
+  # ==========================================
+  # BUILD & PUSH JOB
+  # ==========================================
   build-and-push:
-    name: Build and Push Docker Image
+    name: Build & Push Docker Image
     runs-on: ubuntu-latest
-    needs: unit-test  # Only run if tests pass
-    # Only run on main branch or manual trigger, not on PRs
-    if: github.event_name != 'pull_request'
+    needs: [version-check, unit-tests]
+    if: |
+      needs.version-check.outputs.should_skip != 'true' && 
+      github.event_name != 'pull_request'
+    
     permissions:
-      packages: write
       contents: read
+      packages: write
       attestations: write
       id-token: write
 
+    outputs:
+      image: ${{ needs.version-check.outputs.full_image_name }}
+      version: ${{ needs.version-check.outputs.version }}
+      version_tag: ${{ needs.version-check.outputs.version_tag }}
+      image_with_tag: ${{ needs.version-check.outputs.full_image_name }}:${{ needs.version-check.outputs.version_tag }}
+
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
- 
-      - name: Extract version from pyproject.toml
-        id: version
-        run: |
-          VERSION=$(grep -Po '(?<=^version = ")[^"]+' pyproject.toml)
-          echo "VERSION=$VERSION"
-          echo "VERSION_TAG=v$VERSION" >> $GITHUB_ENV
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "IMAGE=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}" >> $GITHUB_OUTPUT
-          
-      - name: Login to DockerHub
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.DOCKER_REGISTRY }}
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-            
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-            
-      - name: Build & push Docker Image to DockerHub
-        id: buid_and_push
+
+      - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ env.DOCKER_USERNAME_REPO }}/${{ env.DOCKER_IMAGE_NAME }}:${{env.VERSION_TAG }}
+            ${{ needs.version-check.outputs.full_image_name }}:${{ needs.version-check.outputs.version_tag }}
+            ${{ needs.version-check.outputs.full_image_name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Print Images Name
-        run: |     
-          echo "tags: ${{ env.DOCKER_USERNAME_REPO }}/${{ env.DOCKER_IMAGE_NAME }}:${{env.VERSION_TAG }}"
+      - name: Display Built Image
+        run: |
+          echo "✅ Successfully built and pushed:"
+          echo "   Image: ${{ needs.version-check.outputs.full_image_name }}"
+          echo "   Tags: ${{ needs.version-check.outputs.version_tag }}, latest"
 
+  # ==========================================
+  # HELM VALUES UPDATE JOB
+  # ==========================================
+  update-helm-values:
+    name: Update Helm Chart Values
+    runs-on: ubuntu-latest
+    needs: [version-check, build-and-push]
+    if: |
+      needs.version-check.outputs.should_skip != 'true' && 
+      github.event_name != 'pull_request'
 
-  # update-helm-values:
-  #   name: Update Helm Values
-  #   needs: build-and-push
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     CHART_FILE: deployments/helm-charts/fraud-detection/Chart.yaml
-  #     VALUE_FILE: deployments/helm-charts/fraud-detection/values.yaml
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
-  #       with:
-  #         ref: "${{ github.head_ref || github.ref_name }}"
-  #         fetch-depth: 0 # important for PR creation
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-  #     - name: Set up Git config
-  #       run: |
-  #         git config user.name "github-actions[bot]"
-  #         git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Setup Git Configuration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-  #     - name: Install yq
-  #       run: |
-  #         sudo wget https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64 -O /usr/bin/yq
-  #         sudo chmod +x /usr/bin/yq
+      - name: Install yq YAML Processor
+        run: |
+          YQ_VERSION="v4.40.5"
+          sudo wget "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
+          yq --version
 
-  #     - name: Update Chart.yaml & values.yaml with version
-  #       run: |
-  #         VERSION="v${{ needs.build-and-push.outputs.version }}"
-  #         IMAGE="${{ needs.build-and-push.outputs.image }}"
+      - name: Update Helm Chart Files
+        run: |
+          VERSION="${{ needs.version-check.outputs.version }}"
+          VERSION_TAG="${{ needs.version-check.outputs.version_tag }}"
+          IMAGE_REPO="${{ needs.version-check.outputs.full_image_name }}"
+          
+          echo "Updating Helm charts with:"
+          echo "  Chart Version: $VERSION"
+          echo "  App Version: $VERSION"
+          echo "  Image Repository: $IMAGE_REPO"
+          echo "  Image Tag: $VERSION_TAG"
+          
+          # Update Chart.yaml
+          yq eval "
+            .version = \"$VERSION\" |
+            .appVersion = \"$VERSION\"
+          " -i "${{ env.CHART_FILE }}"
+          
+          # Update values.yaml
+          yq eval "
+            .image.repository = \"$IMAGE_REPO\" |
+            .image.tag = \"$VERSION_TAG\"
+          " -i "${{ env.VALUES_FILE }}"
+          
+          # Verify changes
+          echo "=== Updated Chart.yaml ==="
+          yq eval '.version, .appVersion' "${{ env.CHART_FILE }}"
+          
+          echo "=== Updated values.yaml ==="
+          yq eval '.image' "${{ env.VALUES_FILE }}"
 
-  #         yq eval ".version = \"${VERSION#v}\" |
-  #                  .appVersion = \"${VERSION#v}\"" \
-  #                  -i "$CHART_FILE"
+      - name: Commit and Push Changes
+        run: |
+          VERSION_TAG="${{ needs.version-check.outputs.version_tag }}"
+          IMAGE_WITH_TAG="${{ needs.build-and-push.outputs.image_with_tag }}"
+          
+          # Check if there are changes to commit
+          if git diff --quiet "${{ env.CHART_FILE }}" "${{ env.VALUES_FILE }}"; then
+            echo "No changes detected in Helm files."
+            exit 0
+          fi
+          
+          echo "CI/CD: update Helm chart to ${{ needs.version-check.outputs.version_tag }}
+          - Updated chart version to ${{ needs.version-check.outputs.version }}
+          - Updated app version to ${{ needs.version-check.outputs.version }}
+          - Updated image tag to $VERSION_TAG 
+          - git push origin ${{ github.ref_name }}"
 
-  #         yq eval ".image.repository = \"$IMAGE\" |
-  #                  .image.tag = \"$VERSION\"" \
-  #                  -i "$VALUE_FILE"
+          # Stage and commit changes
+          git add "${{ env.CHART_FILE }}" "${{ env.VALUES_FILE }}"
+          git commit -m "ci/cd: update Helm chart to v${{ needs.version-check.outputs.version }}"
+          git push origin ${{ github.ref_name }}
+          
+          echo "✅ Successfully updated and pushed Helm chart changes"
 
-  #         git add "$CHART_FILE" "$VALUE_FILE"
-  #         git commit -m "ci: update Helm values.yaml and Chart.yaml to $IMAGE:$VERSION"
-  #         git push origin HEAD
-
+  # ==========================================
+  # SECURITY SCAN JOB (Optional)
+  # ==========================================
   # security-scan:
-  #   name: Security Scan
+  #   name: Security Vulnerability Scan
   #   runs-on: ubuntu-latest
-  #   needs: build-and-push
-  #   if: github.event_name != 'pull_request'
+  #   needs: [version-check, build-and-push]
+  #   if: |
+  #     needs.version-check.outputs.should_skip != 'true' && 
+  #     github.event_name != 'pull_request'
+
   #   steps:
-  #     - name: Run Trivy vulnerability scanner
+  #     - name: Run Trivy Security Scanner
   #       uses: aquasecurity/trivy-action@master
   #       with:
-  #         image-ref: '${{ env.DOCKER_USERNAME_REPO }}/${{ env.DOCKER_IMAGE_NAME }}:latest'
+  #         image-ref: ${{ needs.build-and-push.outputs.image_with_tag }}
   #         format: 'sarif'
   #         output: 'trivy-results.sarif'
 
-  #     - name: Upload Trivy scan results to GitHub Security tab
-  #       uses: github  /codeql-action/upload-sarif@v2
+  #     - name: Upload Security Scan Results
+  #       uses: github/codeql-action/upload-sarif@v3
+  #       if: always()
   #       with:
   #         sarif_file: 'trivy-results.sarif'

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "doc-genai-system"
-version = "1.0.8"
+version = "1.1.4"
 description = "Document Generation AI System. In build system phase!"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -20,3 +20,7 @@ dependencies = [
     "pytest==7.1.2",
     "pytest-cov>=4.0.0",
 ]
+
+[tool.setuptools.packages.find]
+# Only include Python packages, exclude infrastructure directories
+exclude = ["ansible*", "terraform*", "Iac*", "helm-charts*", "notebooks-and-apps*","tests*", "argo-apps", ".git", ".github", ".gitignore"]
