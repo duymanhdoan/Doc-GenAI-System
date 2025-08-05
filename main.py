@@ -30,6 +30,7 @@ clf = joblib.load(
     os.environ.get('MODEL_PATH', "models/model.pkl")
 )
 
+# add one more line of code. 
 # Creating an endpoint to receive the data
 # to make prediction on.
 @app.post('/predict')
