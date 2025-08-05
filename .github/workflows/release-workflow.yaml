@@ -39,8 +39,8 @@ jobs:
       - name: Check if pyproject.toml version changed
         id: check
         run: |
-          if git rev-parse origin/dev/workflow >/dev/null 2>&1; then
-            DIFF=$(git diff -U0 origin/dev/workflow -- pyproject.toml)
+          if git rev-parse origin/dev/workflow^ >/dev/null 2>&1; then
+            DIFF=$(git diff -U0 origin/dev/workflow^ -- pyproject.toml)
           else
             DIFF=$(git show HEAD:pyproject.toml)
           fi
