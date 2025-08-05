@@ -39,21 +39,21 @@ jobs:
       - name: Check if pyproject.toml version changed
         id: check
         run: |
-          if git rev-parse origin/dev/workflow^ >/dev/null 2>&1; then
-            DIFF=$(git diff -U0 origin/dev/workflow^ -- pyproject.toml)
+          if git rev-parse origin/dev/workflow >/dev/null 2>&1; then
+            DIFF=$(git diff -U0 origin/dev/workflow -- pyproject.toml)
           else
             DIFF=$(git show HEAD:pyproject.toml)
-            fi
+          fi
 
-          if echo "$DIFF" | grep -E '^+\s*version\s*='; then
+          if echo "$DIFF" | grep -E '^+\s*version\s*=' >/dev/null; then
+            # Extract just the version number (not the whole line)
+            NEW_VERSION=$(echo "$DIFF" | grep -E '^+\s*version\s*=' | sed -E 's/.*version\s*=\s*["\']([^"\']+)["\'].*/\1/')
             echo "should_skip=false" >> $GITHUB_OUTPUT
-            echo "New version change: should_skip=false"
-            NEW_VERSION=$(echo "$DIFF" | grep -E '^+\s*version\s*=')
             echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-            echo "New version detected: $NEW_VERSION (should_skip=false)
+            echo "New version detected: $NEW_VERSION"
           else
             echo "should_skip=true" >> $GITHUB_OUTPUT
-            echo "No version change found, Skipp all remaining Jobs."
+            echo "No version change found, Skip all remaining jobs."
           fi
 
   unit-test:
