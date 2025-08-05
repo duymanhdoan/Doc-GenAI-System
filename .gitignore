@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+
+# github action workflows 
+.github/workflows/github-actions-demo.yml
+
 # Distribution / packaging
 .Python
 build/
