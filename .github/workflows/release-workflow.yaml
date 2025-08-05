@@ -45,6 +45,8 @@ jobs:
             DIFF=$(git show HEAD:pyproject.toml)
           fi
 
+          echo "DIFF=$DIFF"
+
           if echo "$DIFF" | grep -E '^+\s*version\s*=' >/dev/null; then
             NEW_VERSION=$(echo "$DIFF" | grep -E '^+\s*version\s*=')
             echo "should_skip=false" >> $GITHUB_OUTPUT
