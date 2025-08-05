@@ -11,8 +11,9 @@ on:
   # Trigger on push to specific branches
   push:
     branches:
-      - 'dev/workflow'
-      - 'main'
+      - 'dev/argocd'
+      # - 'dev/workflow'
+      # - 'main'
   # # Trigger on pull requests for testing
   # pull_request:
   #   branches:
