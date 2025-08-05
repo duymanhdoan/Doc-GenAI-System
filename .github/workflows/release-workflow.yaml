@@ -145,47 +145,48 @@ jobs:
           echo "tags: ${{ env.DOCKER_USERNAME_REPO }}/${{ env.DOCKER_IMAGE_NAME }}:${{env.VERSION_TAG }}"
 
 
-  # update-helm-values:
-  #   name: Update Helm Values
-  #   needs: build-and-push
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     CHART_FILE: deployments/helm-charts/fraud-detection/Chart.yaml
-  #     VALUE_FILE: deployments/helm-charts/fraud-detection/values.yaml
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
-  #       with:
-  #         ref: "${{ github.head_ref || github.ref_name }}"
-  #         fetch-depth: 0 # important for PR creation
+  update-helm-values:
+    name: Update Helm Values
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    env:
+      CHART_FILE: helm-charts/fraud-detection/Chart.yaml
+      VALUE_FILE: helm-charts/fraud-detection/values.yaml
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: "${{ github.head_ref || github.ref_name }}"
+          fetch-depth: 0 # important for PR creation
 
-  #     - name: Set up Git config
-  #       run: |
-  #         git config user.name "github-actions[bot]"
-  #         git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Set up Git config
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-  #     - name: Install yq
-  #       run: |
-  #         sudo wget https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64 -O /usr/bin/yq
-  #         sudo chmod +x /usr/bin/yq
+      - name: Install yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64 -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
 
-  #     - name: Update Chart.yaml & values.yaml with version
-  #       run: |
-  #         VERSION="v${{ needs.build-and-push.outputs.version }}"
-  #         IMAGE="${{ needs.build-and-push.outputs.image }}"
+      - name: Update Chart.yaml & values.yaml with version
+        run: |
+          VERSION="v${{ needs.build-and-push.outputs.VERSION_TAG }}"
+          IMAGE="${{ needs.build-and-push.outputs.IMAGE }}"
 
-  #         yq eval ".version = \"${VERSION#v}\" |
-  #                  .appVersion = \"${VERSION#v}\"" \
-  #                  -i "$CHART_FILE"
+          yq eval ".version = \"${VERSION#v}\" |
+                   .appVersion = \"${VERSION#v}\"" \
+                   -i "$CHART_FILE"
 
-  #         yq eval ".image.repository = \"$IMAGE\" |
-  #                  .image.tag = \"$VERSION\"" \
-  #                  -i "$VALUE_FILE"
+          yq eval ".image.repository = \"$IMAGE\" |
+                   .image.tag = \"$VERSION\"" \
+                   -i "$VALUE_FILE"
 
-  #         git add "$CHART_FILE" "$VALUE_FILE"
-  #         git commit -m "ci: update Helm values.yaml and Chart.yaml to $IMAGE:$VERSION"
-  #         git push origin HEAD
+          git add "$CHART_FILE" "$VALUE_FILE"
+          git commit -m "ci: update Helm values.yaml and Chart.yaml to $IMAGE:$VERSION"
+          git push --set-upstream origin dev/argocd
 
+  # git push origin HEAD
   # security-scan:
   #   name: Security Scan
   #   runs-on: ubuntu-latest
