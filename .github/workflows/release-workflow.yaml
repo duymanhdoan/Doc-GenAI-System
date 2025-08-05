@@ -90,12 +90,20 @@ jobs:
             echo "tests_run=false" >> $GITHUB_OUTPUT
           fi
           
-      - name: Upload coverage reports
+      - name: Upload coverage as artifact
         if: steps.run_tests.outputs.tests_run == 'true'
-        uses: codecov/codecov-action@v3
+        uses: actions/upload-artifact@v4
         with:
-          file: ./coverage.xml
-          fail_ci_if_error: false
+          name: coverage-report
+          path: |
+            coverage.xml
+            htmlcov/
+          
+      - name: Coverage comment
+        if: steps.run_tests.outputs.tests_run == 'true'
+        uses: py-cov-action/python-coverage-comment-action@v3
+        with:
+          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
 
   # Build and push job - runs after tests pass
   build-and-push:
