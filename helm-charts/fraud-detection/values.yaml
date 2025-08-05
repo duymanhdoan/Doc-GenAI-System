@@ -1,7 +1,7 @@
 replicaCount: 2
 image:
-  repository: "manhduyatsd/mydoc-ai-system"
-  tag: "v1.0.1"
+  repository: ""
+  tag: "v"
   pullPolicy: IfNotPresent
 service:
   type: ClusterIP
