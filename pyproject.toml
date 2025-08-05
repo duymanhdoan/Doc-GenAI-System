@@ -20,3 +20,7 @@ dependencies = [
     "pytest==7.1.2",
     "pytest-cov>=4.0.0",
 ]
+
+[tool.setuptools.packages.find]
+# Only include Python packages, exclude infrastructure directories
+exclude = ["ansible*", "terraform*", "Iac*", "helm-charts*", "notebooks-and-apps*","tests*", "argo-apps", ".git", ".github", ".gitignore"]
