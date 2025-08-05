@@ -90,27 +90,27 @@ jobs:
             echo "tests_run=false" >> $GITHUB_OUTPUT
           fi
           
-      - name: Upload coverage reports as artifacts
-        if: steps.run_tests.outputs.tests_run == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-reports
-          path: |
-            coverage.xml
-            htmlcov/
-          retention-days: 30
+      # - name: Upload coverage reports as artifacts
+      #   if: steps.run_tests.outputs.tests_run == 'true'
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: coverage-reports
+      #     path: |
+      #       coverage.xml
+      #       htmlcov/
+      #     retention-days: 30
 
-      - name: Coverage Summary in PR
+      - name: Upload report as artifacts to Codecov
         if: steps.run_tests.outputs.tests_run == 'true'
-        run: |
-          echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
-          coverage report --format=markdown >> $GITHUB_STEP_SUMMARY || echo "Coverage report not available" >> $GITHUB_STEP_SUMMARY
-                
-            # - name: Coverage comment
-            #   if: steps.run_tests.outputs.tests_run == 'true'
-            #   uses: py-cov-action/python-coverage-comment-action@v3
-            #   with:
-            #     GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: coverage.xml
+          fail_ci_if_error: false
+
+
+
+
 
   # Build and push job - runs after tests pass
   # build-and-push:
