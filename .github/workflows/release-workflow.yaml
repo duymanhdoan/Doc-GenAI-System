@@ -46,8 +46,7 @@ jobs:
           fi
 
           if echo "$DIFF" | grep -E '^+\s*version\s*=' >/dev/null; then
-            # Extract just the version number (not the whole line)
-            NEW_VERSION=$(echo "$DIFF" | grep -E '^+\s*version\s*=' | sed -E 's/.*version\s*=\s*["\']([^"\']+)["\'].*/\1/')
+            NEW_VERSION=$(echo "$DIFF" | grep -E '^+\s*version\s*=')
             echo "should_skip=false" >> $GITHUB_OUTPUT
             echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
             echo "New version detected: $NEW_VERSION"
