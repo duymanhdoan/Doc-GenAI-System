@@ -251,14 +251,15 @@ jobs:
             exit 0
           fi
           
-          echo "CI/CD: update Helm chart to $IMAGE_WITH_TAG
+          echo "CI/CD: update Helm chart to ${{ needs.version-check.outputs.version_tag }}
           - Updated chart version to ${{ needs.version-check.outputs.version }}
           - Updated app version to ${{ needs.version-check.outputs.version }}
-          - Updated image tag to $VERSION_TAG"
+          - Updated image tag to $VERSION_TAG 
+          - git push origin ${{ github.ref_name }}"
 
           # Stage and commit changes
           git add "${{ env.CHART_FILE }}" "${{ env.VALUES_FILE }}"
-          git commit -m "ci/cd: update Helm chart to $IMAGE_WITH_TAG"
+          git commit -m "ci/cd: update Helm chart to v${{ needs.version-check.outputs.version }}"
           git push origin ${{ github.ref_name }}
           
           echo "✅ Successfully updated and pushed Helm chart changes"
