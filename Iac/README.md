@@ -53,3 +53,49 @@ terraform init
 terraform plan
 terraform apply
 ```
+
+
+
+### The error 
+The IPv6 Error Context:
+The error you're experiencing happens because:
+
+Cluster exists - Terraform can see it in the state
+Refresh operation fails - When you run terraform apply, it first tries to refresh the current state by making API calls to Google Cloud
+IPv6 connectivity issue - The refresh fails due to the same IPv6 problem
+### Following step when re-run terraform apply
+This is Terraform trying to READ the existing cluster state, not create it. The workflow is:
+
+Terraform reads its state file
+Terraform tries to refresh by calling Google APIs
+IPv6 connectivity fails during the API call
+Terraform can't proceed with the apply
+
+
+### Option 1: Quick Fix (Use Environment Variable)
+```bash
+export GODEBUG=netdns=go+1
+terraform apply
+
+```
+
+### Option 2: Skip Refresh (If No Changes Needed)
+
+```bash
+terraform apply -refresh=false
+```
+
+### Option 3: Verify Your Current Setup
+Since everything is already deployed, you can verify it's working:
+```bash
+
+# Connect to your cluster
+gcloud container clusters get-credentials debug-cluster --location asia-southeast1-b
+
+# Check cluster status
+kubectl get nodes
+kubectl get pods -n argo-cd
+
+# Get ArgoCD admin password
+kubectl -n argo-cd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+```
