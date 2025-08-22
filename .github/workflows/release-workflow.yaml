@@ -5,7 +5,8 @@ on:
   push:
     branches:
       - 'dev/argocd'
-      - 'main'
+      - 'dev/monitoring-system'
+      # - 'main'
   pull_request:
     branches:
       - 'main'
