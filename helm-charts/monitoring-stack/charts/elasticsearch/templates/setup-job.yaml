@@ -1,0 +1,68 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "elasticsearch.fullname" . }}-setup
+  namespace: {{ .Values.global.namespace | default .Release.Namespace | default "logging" }}
+  labels:
+    {{- include "elasticsearch.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "elasticsearch.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+      - name: wait-for-elasticsearch
+        image: curlimages/curl:7.85.0
+        command:
+        - sh
+        - -c
+        - |
+          until curl -s http://{{ include "elasticsearch.fullname" . }}:9200/_cluster/health?wait_for_status=yellow&timeout=30s; do
+            echo "Waiting for Elasticsearch to be ready..."
+            sleep 5
+          done
+          echo "Elasticsearch is ready"
+      containers:
+      - name: setup
+        image: curlimages/curl:7.85.0
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          ES_URL="http://{{ include "elasticsearch.fullname" . }}:9200"
+          
+          echo "Setting up Elasticsearch users and roles..."
+          
+          # Create logstash_writer role
+          curl -X PUT "$ES_URL/_security/role/logstash_writer" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "cluster": ["monitor", "manage_index_templates", "manage_ilm"],
+              "indices": [
+                {
+                  "names": [ "filebeat-*", "logstash-*", "logs-*" ],
+                  "privileges": ["write", "create", "create_index", "manage", "manage_ilm"]
+                }
+              ]
+            }' || echo "Role creation skipped - may already exist"
+          
+          # Set built-in user passwords (if not already set)
+          curl -X POST "$ES_URL/_security/user/kibana_system/_password" \
+            -H "Content-Type: application/json" \
+            -d '{"password": "{{ .Values.config.kibanaSystemPassword | default "kibana" }}"}' \
+            || echo "Password setting skipped - may already be set"
+          
+          echo "Setup completed successfully"
+        env:
+        - name: ELASTIC_PASSWORD
+          value: "{{ .Values.config.elasticPassword | default "changeme" }}"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534

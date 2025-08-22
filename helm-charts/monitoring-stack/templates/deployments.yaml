@@ -1,0 +1,502 @@
+{{/*
+UMBRELLA CHART DEPLOYMENTS TEMPLATE - OBSERVABILITY PLATFORM
+===========================================================
+This template creates Deployment resources for all stateful observability services
+using a loop-based approach for consistency and maintainability.
+
+ARCHITECTURE PATTERN:
+- Single template generates multiple deployments using Helm range loops
+- Service-specific configuration through conditional logic
+- Consistent labeling and resource management across all services
+- Dynamic namespace assignment based on service type
+
+SERVICES MANAGED BY THIS TEMPLATE:
+1. grafana: Metrics visualization dashboards (Pillar #1 - Metrics)
+2. prometheus: Time-series metrics collection (Pillar #1 - Metrics)  
+3. alertmanager: Alert routing and notifications (Pillar #1 - Metrics)
+4. jaeger: Distributed tracing collection (Pillar #3 - Tracing)
+5. elasticsearch: Log storage and search (Pillar #2 - Logging)
+6. kibana: Log visualization and analysis (Pillar #2 - Logging)
+
+TEMPLATE VARIABLES EXPLANATION:
+- $subcharts: List of service names to iterate over
+- $chartName: Current service being processed in the loop
+- $chartConfig: Configuration values for the current service
+*/}}
+{{- $subcharts := list "grafana" "prometheus" "alertmanager" "jaeger" "elasticsearch" "kibana" }}
+{{/*
+SERVICE ITERATION LOOP
+=====================
+Iterates through each observability service to create its Deployment resource
+Only creates deployments for services that are enabled in values.yaml
+*/}}
+{{- range $subcharts }}
+{{- $chartName := . }}
+{{/*
+CONDITIONAL SERVICE DEPLOYMENT
+=============================
+Checks if the current service is enabled before creating its deployment
+Uses Helm's index function to access nested values like prometheus.enabled
+*/}}
+{{- if index $.Values $chartName "enabled" }}
+{{- $chartConfig := index $.Values $chartName }}
+---
+# DEPLOYMENT FOR {{ $chartName | upper }} SERVICE
+# {{ printf "=%.50s" "==================================================" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $chartName }}
+  # NAMESPACE ASSIGNMENT
+  # ===================
+  # Uses service-specific namespace or defaults to 'observability'
+  # ELK services (elasticsearch, kibana) typically use 'logging' namespace
+  namespace: {{ $chartConfig.namespace | default "observability" }}
+  labels:
+    # KUBERNETES RECOMMENDED LABELS
+    # ============================
+    # Standard labels for resource identification and management
+    app.kubernetes.io/name: {{ $chartName }}                    # Service identifier
+    app.kubernetes.io/instance: {{ $chartName }}                # Instance identifier
+    app.kubernetes.io/component: {{ $chartName }}               # Component type
+    app.kubernetes.io/part-of: monitoring-stack                 # Parent system
+    app.kubernetes.io/managed-by: helm                          # Management tool
+    # OBSERVABILITY PLATFORM LABELS
+    # ============================
+    {{- if or (eq $chartName "grafana") (eq $chartName "prometheus") (eq $chartName "alertmanager") }}
+    observability.platform/pillar: "metrics"                    # Metrics pillar services
+    {{- else if eq $chartName "jaeger" }}
+    observability.platform/pillar: "tracing"                    # Tracing pillar service
+    {{- else if or (eq $chartName "elasticsearch") (eq $chartName "kibana") }}
+    observability.platform/pillar: "logging"                    # Logging pillar services
+    {{- end }}
+spec:
+  # REPLICA CONFIGURATION
+  # ====================  
+  # Number of pod replicas for this service
+  # Defaults to 1 if not specified in values.yaml
+  # Production environments may use multiple replicas for HA
+  replicas: {{ $chartConfig.replicas | default 1 }}
+  
+  # POD SELECTOR
+  # ===========
+  # Labels used to identify pods managed by this deployment
+  # Must match the labels in template.metadata.labels
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $chartName }}          # Service name selector
+      app.kubernetes.io/instance: {{ $chartName }}      # Instance name selector
+      
+  # POD TEMPLATE SPECIFICATION
+  # =========================
+  # Template for pods created by this deployment
+  template:
+    metadata:
+      labels:
+        # POD LABELS
+        # =========
+        # These labels are applied to individual pods
+        # Must include all labels from selector.matchLabels
+        app.kubernetes.io/name: {{ $chartName }}         # Pod service identifier
+        app.kubernetes.io/instance: {{ $chartName }}     # Pod instance identifier  
+        app.kubernetes.io/component: {{ $chartName }}    # Pod component type
+        
+        # SERVICE DISCOVERY LABELS
+        # =======================
+        # Additional labels for service discovery and monitoring
+        {{- if eq $chartName "prometheus" }}
+        prometheus.io/scrape: "true"                      # Enable metrics scraping
+        prometheus.io/port: "9090"                        # Metrics port
+        {{- else if eq $chartName "grafana" }}
+        grafana.platform/dashboard: "enabled"            # Mark as dashboard service
+        {{- end }}
+      annotations:
+        # POD ANNOTATIONS
+        # ==============
+        # Annotations for pod-specific configuration
+        {{- if eq $chartName "prometheus" }}
+        prometheus.io/path: "/metrics"                    # Metrics endpoint path
+        {{- end }}
+        checksum/config: {{ include "monitoring-stack.configChecksum" (dict "service" $chartName "context" $) }}
+    spec:
+      # SERVICE ACCOUNT CONFIGURATION
+      # ============================
+      # Use dedicated service accounts for RBAC permissions
+      {{- if eq $chartName "prometheus" }}
+      serviceAccountName: prometheus
+      {{- else }}
+      serviceAccountName: {{ $chartName }}
+      {{- end }}
+      
+      {{/*
+      SECURITY CONTEXT CONFIGURATION
+      ==============================
+      Apply security context from values.yaml for each service
+      */}}
+      {{- if $chartConfig.securityContext }}
+      # POD SECURITY CONTEXT
+      # ====================
+      securityContext:
+        {{- toYaml $chartConfig.securityContext | nindent 8 }}
+      {{- else if eq $chartName "elasticsearch" }}
+      # DEFAULT ELASTICSEARCH SECURITY CONTEXT
+      # =====================================
+      securityContext:
+        runAsUser: 1000                     # elasticsearch user ID
+        runAsGroup: 1000                    # elasticsearch group ID
+        fsGroup: 1000                       # File system group for volume access
+        
+      # INIT CONTAINER FOR ELASTICSEARCH DATA DIRECTORY PERMISSIONS
+      # ==========================================================
+      # Ensures data directory has correct ownership before main container starts
+      initContainers:
+      - name: fix-permissions
+        image: busybox:1.35               # Lightweight container for permission fixes
+        command: ['sh', '-c', 'chown -R 1000:1000 /usr/share/elasticsearch/data']
+        volumeMounts:
+        - name: elasticsearch-data        # Mount data volume for permission fixing
+          mountPath: /usr/share/elasticsearch/data
+        securityContext:
+          runAsUser: 0                    # Run as root to change ownership
+      {{- end }}
+      
+      # MAIN SERVICE CONTAINERS
+      # ======================
+      # Primary container for each observability service
+      containers:
+      - name: {{ $chartName }}
+        # CONTAINER IMAGE CONFIGURATION
+        # ============================
+        # Image repository and tag from values.yaml configuration
+        image: "{{ $chartConfig.image.repository }}:{{ $chartConfig.image.tag }}"
+        imagePullPolicy: {{ $chartConfig.image.pullPolicy | default "IfNotPresent" }}
+        {{/*
+        SERVICE-SPECIFIC CONTAINER CONFIGURATION
+        =======================================
+        Each service has unique port, environment, and argument configurations
+        */}}
+        {{- if eq $chartName "prometheus" }}
+        {{/*
+        PROMETHEUS CONFIGURATION - METRICS COLLECTION PILLAR
+        ===================================================
+        Time-series metrics database with web UI and API
+        */}}
+        {{- if $chartConfig.args }}
+        # PROMETHEUS STARTUP ARGUMENTS
+        # ===========================
+        # Command-line arguments for Prometheus server configuration
+        args:
+        {{- range $chartConfig.args }}
+        - {{ . }}                         # Argument from values.yaml (e.g., --config.file, --storage.tsdb.path)
+        {{- end }}
+        {{- if $.Values.ingress.enabled }}
+        # EXTERNAL URL CONFIGURATION
+        # =========================
+        # Sets external URL for Prometheus when accessed via ingress
+        - --web.external-url={{ $.Values.global.protocol }}://{{ $.Values.global.externalHost }}/prometheus/
+        {{- end }}
+        {{- end }}
+        # PROMETHEUS NETWORK PORTS
+        # =======================
+        ports:
+        - containerPort: 9090             # Prometheus web UI and API port
+          name: web                       # Port name for service reference
+          protocol: TCP
+          
+        {{- else if eq $chartName "grafana" }}
+        {{/*
+        GRAFANA CONFIGURATION - METRICS VISUALIZATION PILLAR  
+        ===================================================
+        Dashboard and visualization platform for metrics data
+        */}}
+        # GRAFANA NETWORK PORTS
+        # ====================
+        ports:
+        - containerPort: 3000             # Grafana web interface port
+          name: http                      # Port name for service reference  
+          protocol: TCP
+          
+        # GRAFANA ENVIRONMENT VARIABLES
+        # ============================
+        # Configuration for Grafana server behavior and authentication
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          # Admin username from service config or global default
+          value: {{ $chartConfig.adminUser | default $.Values.global.adminCredentials.user | quote }}
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          # Admin password from service config or global default
+          value: {{ $chartConfig.adminPassword | default $.Values.global.adminCredentials.password | quote }}
+        - name: GF_SERVER_ROOT_URL
+          # Root URL for Grafana when served from sub-path via ingress
+          value: {{ $chartConfig.server.rootUrl | default "%(protocol)s://%(domain)s:%(http_port)s/grafana/" | quote }}
+        - name: GF_SERVER_SERVE_FROM_SUB_PATH
+          # Enable sub-path serving for ingress routing compatibility
+          value: {{ $chartConfig.server.serveFromSubPath | default "true" | quote }}
+        {{- else if eq $chartName "alertmanager" }}
+        {{/*
+        ALERTMANAGER CONFIGURATION - ALERT ROUTING PILLAR
+        ================================================
+        Alert routing and notification management system
+        */}}
+        # ALERTMANAGER NETWORK PORTS
+        # =========================
+        ports:
+        - containerPort: 9093             # AlertManager web interface port
+          name: web                       # Port name for service reference
+          protocol: TCP
+          
+        {{- else if eq $chartName "jaeger" }}
+        {{/*
+        JAEGER CONFIGURATION - DISTRIBUTED TRACING PILLAR
+        ================================================
+        All-in-one Jaeger deployment for distributed tracing collection and UI
+        */}}
+        {{- if $chartConfig.subPath.enabled }}
+        # JAEGER SUB-PATH CONFIGURATION
+        # ============================
+        # Environment variables for serving Jaeger UI from sub-path
+        env:
+        - name: QUERY_BASE_PATH
+          # Base path for Jaeger UI when served via ingress sub-path
+          value: {{ $chartConfig.subPath.basePath | quote }}
+        {{- end }}
+        # JAEGER NETWORK PORTS
+        # ===================
+        ports:
+        - containerPort: 16686            # Jaeger Query UI port
+          name: query                     # Port name for service reference
+          protocol: TCP
+          
+        {{- else if eq $chartName "elasticsearch" }}
+        {{/*
+        ELASTICSEARCH CONFIGURATION - LOG STORAGE PILLAR
+        ===============================================
+        Distributed search and analytics engine for log storage
+        */}}
+        # ELASTICSEARCH ENVIRONMENT VARIABLES
+        # ==================================
+        # Configuration for Elasticsearch cluster and security settings
+        env:
+        - name: cluster.name
+          # Elasticsearch cluster name for node identification
+          value: {{ $chartConfig.config.clusterName | quote }}
+        - name: network.host
+          # Network interface binding (0.0.0.0 allows external connections)
+          value: {{ $chartConfig.config.networkHost | quote }}
+        - name: discovery.type
+          # Discovery mode for single-node deployment
+          value: {{ $chartConfig.config.discoveryType | quote }}
+        - name: xpack.security.enabled
+          # Disable X-Pack security for simplified setup
+          value: {{ $chartConfig.config.xpackSecurityEnabled | quote }}
+        - name: ES_JAVA_OPTS
+          # Java heap size configuration for Elasticsearch JVM
+          value: {{ $chartConfig.config.javaOpts | quote }}
+          
+        # ELASTICSEARCH NETWORK PORTS
+        # ===========================
+        ports:
+        - containerPort: 9200             # HTTP API port for REST operations
+          name: http                      # Port name for service reference
+          protocol: TCP
+        - containerPort: 9300             # Transport port for cluster communication
+          name: transport                 # Port name for internal cluster traffic
+          protocol: TCP
+        {{- else if eq $chartName "kibana" }}
+        {{/*
+        KIBANA CONFIGURATION - LOG VISUALIZATION PILLAR  
+        ==============================================
+        Web interface for Elasticsearch log search and visualization
+        */}}
+        # KIBANA ENVIRONMENT VARIABLES
+        # ===========================
+        # Configuration for Kibana server and Elasticsearch connection
+        env:
+        - name: SERVER_NAME
+          # Kibana server hostname identifier
+          value: {{ $chartConfig.config.serverName | quote }}
+        - name: SERVER_HOST
+          # Network interface binding (0.0.0.0 allows external connections)
+          value: {{ $chartConfig.config.serverHost | quote }}
+        - name: ELASTICSEARCH_HOSTS
+          # Elasticsearch cluster connection URL for log data access
+          value: {{ $chartConfig.config.elasticsearchHosts | quote }}
+        - name: XPACK_SECURITY_ENABLED
+          # Disable X-Pack security for simplified setup (matches Elasticsearch)
+          value: "false"
+          
+        # KIBANA NETWORK PORTS
+        # ===================
+        ports:
+        - containerPort: 5601             # Kibana web interface port
+          name: http                      # Port name for service reference
+          protocol: TCP
+        {{- end }}
+        
+        # RESOURCE ALLOCATION
+        # ==================
+        # CPU and memory limits/requests for container performance
+        {{- if $chartConfig.resources }}
+        resources:
+          # Resource configuration from values.yaml (limits, requests)
+          {{- toYaml $chartConfig.resources | nindent 10 }}
+        {{- end }}
+        {{/*
+        SERVICE-SPECIFIC VOLUME MOUNTS
+        ==============================
+        Each service requires different volume mounts for data persistence and configuration
+        */}}
+        {{- if eq $chartName "elasticsearch" }}
+        # ELASTICSEARCH VOLUME MOUNTS
+        # ===========================
+        volumeMounts:
+        - name: elasticsearch-data
+          # Elasticsearch data directory for indices and cluster state
+          mountPath: /usr/share/elasticsearch/data
+          
+        {{- else if eq $chartName "prometheus" }}
+        # PROMETHEUS VOLUME MOUNTS
+        # =======================
+        volumeMounts:
+        - name: prometheus-data
+          # Time-series database storage directory
+          mountPath: /prometheus
+        - name: prometheus-config
+          # Configuration files (prometheus.yml, alert rules)
+          mountPath: /etc/prometheus
+          readOnly: true              # Configuration is read-only
+          
+        {{- else if eq $chartName "grafana" }}
+        # GRAFANA VOLUME MOUNTS
+        # ====================
+        volumeMounts:
+        - name: grafana-data
+          # Grafana database and dashboard storage
+          mountPath: /var/lib/grafana
+        - name: grafana-datasources
+          # Pre-configured datasource definitions
+          mountPath: /etc/grafana/provisioning/datasources
+          readOnly: true              # Datasource config is read-only
+        - name: grafana-dashboards
+          # Pre-configured dashboard definitions
+          mountPath: /etc/grafana/provisioning/dashboards
+          readOnly: true              # Dashboard config is read-only
+          
+        {{- else if eq $chartName "alertmanager" }}
+        # ALERTMANAGER VOLUME MOUNTS
+        # =========================
+        volumeMounts:
+        - name: alertmanager-data
+          # AlertManager state and notification history
+          mountPath: /alertmanager
+        - name: alertmanager-config
+          # AlertManager routing and notification configuration
+          mountPath: /etc/alertmanager
+          readOnly: true              # Configuration is read-only
+        {{- end }}
+      # VOLUME DEFINITIONS
+      # =================
+      # Storage volumes for data persistence and configuration
+      volumes:
+      {{- if eq $chartName "elasticsearch" }}
+      # ELASTICSEARCH VOLUMES
+      # ====================
+      - name: elasticsearch-data
+        {{- if and $chartConfig.persistence $chartConfig.persistence.enabled }}
+        # PERSISTENT STORAGE
+        # =================
+        # Production-ready storage that survives pod restarts
+        persistentVolumeClaim:
+          claimName: elasticsearch-data   # PVC name from pvcs.yaml template
+        {{- else }}
+        # EPHEMERAL STORAGE
+        # ================
+        # Development/testing storage - data lost on pod restart
+        emptyDir: {}
+        {{- end }}
+        
+      {{- else if eq $chartName "prometheus" }}
+      # PROMETHEUS VOLUMES
+      # =================
+      - name: prometheus-data
+        {{- if and $chartConfig.persistence $chartConfig.persistence.enabled }}
+        # PERSISTENT METRICS STORAGE
+        # =========================
+        # Time-series data storage that survives restarts
+        persistentVolumeClaim:
+          claimName: prometheus-data      # PVC name from pvcs.yaml template
+        {{- else }}
+        # EPHEMERAL METRICS STORAGE
+        # ========================
+        # Temporary storage - metrics lost on restart
+        emptyDir: {}
+        {{- end }}
+      - name: prometheus-config
+        # PROMETHEUS CONFIGURATION
+        # =======================
+        # ConfigMap containing prometheus.yml and alerting rules
+        configMap:
+          name: prometheus-config         # ConfigMap from configmaps.yaml template
+          
+      {{- else if eq $chartName "grafana" }}
+      # GRAFANA VOLUMES
+      # ==============
+      - name: grafana-data
+        {{- if and $chartConfig.persistence $chartConfig.persistence.enabled }}
+        # PERSISTENT DASHBOARD STORAGE
+        # ===========================
+        # Grafana database and user dashboards storage
+        persistentVolumeClaim:
+          claimName: grafana-data         # PVC name from pvcs.yaml template
+        {{- else }}
+        # EPHEMERAL DASHBOARD STORAGE
+        # =========================
+        # Temporary storage - dashboards lost on restart
+        emptyDir: {}
+        {{- end }}
+      - name: grafana-datasources
+        # GRAFANA DATASOURCE CONFIGURATION
+        # ===============================
+        # Pre-configured datasources (Prometheus, AlertManager)
+        configMap:
+          name: grafana-datasources       # ConfigMap from configmaps.yaml template
+      - name: grafana-dashboards
+        # GRAFANA DASHBOARD CONFIGURATION
+        # ==============================
+        # Pre-configured dashboard definitions
+        configMap:
+          name: grafana-dashboards        # ConfigMap from configmaps.yaml template
+          
+      {{- else if eq $chartName "alertmanager" }}
+      # ALERTMANAGER VOLUMES
+      # ===================
+      - name: alertmanager-data
+        {{- if and $chartConfig.persistence $chartConfig.persistence.enabled }}
+        # PERSISTENT ALERT STORAGE
+        # =======================
+        # AlertManager state and notification history storage
+        persistentVolumeClaim:
+          claimName: alertmanager-data    # PVC name from pvcs.yaml template
+        {{- else }}
+        # EPHEMERAL ALERT STORAGE
+        # ======================
+        # Temporary storage - alert history lost on restart
+        emptyDir: {}
+        {{- end }}
+      - name: alertmanager-config
+        # ALERTMANAGER CONFIGURATION
+        # =========================
+        # Alert routing rules and notification settings
+        configMap:
+          name: alertmanager-config       # ConfigMap from configmaps.yaml template
+      {{- end }}
+{{/*
+END OF SERVICE ITERATION LOOP
+============================
+*/}}
+{{- end }}
+{{/*
+END OF ENABLED SERVICE CHECK
+===========================
+*/}}
+{{- end }}

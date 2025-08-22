@@ -1,0 +1,94 @@
+# NGINX INGRESS CONTROLLER SERVICE - EXTERNAL LOAD BALANCER
+# =========================================================
+# LoadBalancer service that exposes the NGINX Ingress Controller to external traffic
+# This is the primary entry point for all observability platform services
+#
+# SERVICE PURPOSE:
+# - Provides external IP address for the entire observability platform
+# - Load balances traffic across multiple ingress controller replicas
+# - Integrates with cloud provider load balancer provisioning
+# - Handles both HTTP and HTTPS traffic termination
+#
+# TRAFFIC FLOW:
+# External Users -> Cloud LB -> LoadBalancer Service -> Ingress Controller Pods -> Backend Services
+#
+# INTEGRATION POINTS:
+# - OCR service: Routes /ocr-app/* traffic for image processing
+# - Grafana: Routes /grafana/* traffic for metrics dashboards  
+# - Prometheus: Routes /prometheus/* traffic for metrics queries
+# - Jaeger: Routes /jaeger/* traffic for distributed tracing
+# - Kibana: Routes /kibana/* traffic for log analysis
+
+apiVersion: v1
+kind: Service
+metadata:
+  # SERVICE IDENTIFICATION
+  # =====================
+  name: {{ .Values.controller.service.name }}          # Service name from values.yaml
+  namespace: {{ .Values.namespace.name }}              # Ingress controller namespace
+  labels:
+    # KUBERNETES RECOMMENDED LABELS
+    # ============================
+    app.kubernetes.io/name: {{ .Values.controller.name }}        # Controller identifier
+    app.kubernetes.io/component: controller                      # Component type
+    app.kubernetes.io/instance: {{ .Release.Name }}              # Helm release instance
+    app.kubernetes.io/managed-by: {{ .Release.Service }}         # Managed by Helm
+    # OBSERVABILITY PLATFORM LABELS
+    # ============================
+    observability.platform/component: "external-gateway"        # Platform integration label
+    observability.platform/traffic-type: "external"             # External traffic handler
+  annotations:
+    # CLOUD PROVIDER ANNOTATIONS
+    # =========================
+    # Additional annotations for cloud-specific load balancer configuration
+    {{- with .Values.controller.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    # SERVICE DISCOVERY ANNOTATIONS
+    # ============================
+    service.kubernetes.io/load-balancer-class: ""               # Default load balancer class
+    external-dns.alpha.kubernetes.io/hostname: "{{ .Values.monitoring.externalIP }}"  # External DNS integration
+spec:
+  # SERVICE TYPE CONFIGURATION
+  # =========================
+  # LoadBalancer type requests external IP from cloud provider
+  type: {{ .Values.controller.service.type }}          # LoadBalancer for external access
+  
+  # LOAD BALANCER SOURCE RESTRICTIONS
+  # =================================
+  # Optional IP address ranges that are allowed to access the load balancer
+  {{- if .Values.controller.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- range .Values.controller.service.loadBalancerSourceRanges }}
+    - {{ . }}                                          # CIDR block for access control
+    {{- end }}
+  {{- end }}
+  
+  # SERVICE PORT CONFIGURATION
+  # =========================
+  # Defines the ports exposed by this service to external traffic
+  ports:
+  - name: http                                          # HTTP traffic port
+    port: {{ .Values.controller.service.ports.http }}  # External port (80)
+    targetPort: http                                    # Target port name on pods
+    protocol: TCP                                       # TCP protocol for HTTP
+  - name: https                                         # HTTPS traffic port
+    port: {{ .Values.controller.service.ports.https }} # External port (443)
+    targetPort: https                                   # Target port name on pods  
+    protocol: TCP                                       # TCP protocol for HTTPS
+    
+  # POD SELECTOR CONFIGURATION
+  # =========================
+  # Labels used to select ingress controller pods for traffic routing
+  selector:
+    app.kubernetes.io/name: {{ .Values.controller.name }}        # Match controller pods
+    app.kubernetes.io/component: controller                      # Match controller component
+    app.kubernetes.io/instance: {{ .Release.Name }}              # Match release instance
+    
+  # SERVICE SESSION AFFINITY
+  # =======================
+  # Optional: Configure session affinity for sticky sessions
+  # sessionAffinity: ClientIP
+  # sessionAffinityConfig:
+  #   clientIP:
+  #     timeoutSeconds: 300

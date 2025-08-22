@@ -1,0 +1,163 @@
+{{/*
+OBSERVABILITY PLATFORM INGRESS CONFIGURATION
+===========================================
+External access management for all observability services via NGINX Ingress Controller
+
+ROUTING STRATEGY:
+- Path-based routing to different observability services
+- Separate Ingress resources for observability and logging namespaces
+- Special handling for Jaeger UI paths due to its multi-path structure
+
+NGINX INGRESS ANNOTATIONS EXPLAINED:
+1. ssl-redirect: "false" - Allows HTTP access (HTTPS can be enabled separately)
+2. use-regex: "true" - Enables regex path matching for flexible routing  
+3. configuration-snippet - Custom NGINX configuration for path rewriting
+
+PATH REWRITING LOGIC:
+- Most services: Strip service prefix from URL before forwarding
+- Jaeger: Preserve original paths for proper UI functionality
+- Example: /grafana/dashboard -> /dashboard (forwarded to Grafana)
+*/}}
+{{- if .Values.ingress.enabled }}
+---
+# OBSERVABILITY SERVICES INGRESS
+# ==============================
+# Handles external routing for metrics, tracing, and alerting services
+# Services: Prometheus, Grafana, AlertManager, Jaeger
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-monitoring-ingress
+  namespace: {{ .Values.namespaces.observability.name }}
+  labels:
+    {{- with .Values.global.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    app.kubernetes.io/component: ingress
+    observability.platform/service-type: "monitoring"
+  annotations:
+    # NGINX Ingress Controller Configuration
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"      # Allow HTTP access
+    nginx.ingress.kubernetes.io/use-regex: "true"          # Enable regex matching
+    
+    # CUSTOM PATH REWRITING LOGIC
+    # ===========================
+    # This snippet handles different URL rewriting strategies:
+    # - Jaeger paths (search, trace, static, api) are preserved as-is
+    # - Other service paths are stripped of their prefix before forwarding
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      # Preserve Jaeger UI paths for proper functionality
+      # Jaeger requires specific paths like /search, /trace to work correctly
+      if ($uri !~ ^/(search|trace|static|api)) {
+        # For non-Jaeger services, remove the service prefix
+        # Example: /grafana/dashboard -> /dashboard
+        rewrite ^/([^/]+)(/|$)(.*) /$3 break;
+      }
+spec:
+  {{- if .Values.ingress.className }}
+  # Use specified IngressClass (typically 'nginx')
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  
+  # ROUTING RULES CONFIGURATION
+  # ===========================
+  # Defines how external requests are routed to internal services
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | default $.Values.global.externalHost | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          {{- if eq .service "jaeger" }}
+          # SPECIAL JAEGER ROUTING
+          # =====================
+          # Jaeger UI requires specific path handling due to its architecture
+          # Paths like /search, /trace, /static, /api must be preserved
+          - path: {{ .path }}
+            pathType: Prefix                    # Simple prefix matching
+            backend:
+              service:
+                name: {{ .service }}            # jaeger service
+                port:
+                  number: {{ .port }}           # 16686 (Jaeger UI)
+          {{- else }}
+          # STANDARD SERVICE ROUTING  
+          # ========================
+          # Most observability services use path rewriting
+          # URL: /grafana/dashboard -> forwarded as: /dashboard
+          - path: {{ .path }}(/|$)(.*)          # Regex capture groups for rewriting
+            pathType: ImplementationSpecific    # Allows regex matching
+            backend:
+              service:
+                name: {{ .service }}            # prometheus, grafana, alertmanager
+                port:
+                  number: {{ .port }}           # Service-specific port
+          {{- end }}
+          {{- end }}
+    {{- end }}
+---
+# LOGGING SERVICES INGRESS (ELK Stack)
+# ====================================
+# Handles external routing for log storage and visualization services
+# Services: Elasticsearch, Kibana (Filebeat is internal DaemonSet)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-logging-ingress
+  namespace: {{ .Values.namespaces.logging.name }}
+  labels:
+    {{- with .Values.global.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    app.kubernetes.io/component: ingress
+    observability.platform/service-type: "logging"
+  annotations:
+    # NGINX CONFIGURATION FOR ELK STACK
+    # =================================
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"    # Allow HTTP access
+    nginx.ingress.kubernetes.io/use-regex: "true"        # Enable regex path matching
+    nginx.ingress.kubernetes.io/rewrite-target: /$2      # Rewrite using capture group 2
+    
+    # LOGGING-SPECIFIC ANNOTATIONS
+    # ===========================
+    # ELK services may require larger request bodies for bulk operations
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+spec:
+  {{- if .Values.ingress.className }}
+  # Use the same IngressClass as monitoring services for consistency
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  
+  # LOGGING SERVICES ROUTING
+  # =======================
+  # Path-based routing to ELK stack components
+  rules:
+    - host: {{ .Values.global.externalHost | quote }}
+      http:
+        paths:
+          # ELASTICSEARCH API ACCESS
+          # =======================
+          # Direct access to Elasticsearch REST API
+          # Used for: Index management, search queries, debugging
+          - path: /elasticsearch(/|$)(.*)        # Regex: /elasticsearch/xxx -> /xxx
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: elasticsearch             # Elasticsearch service
+                port:
+                  number: 9200                  # Standard Elasticsearch HTTP port
+          
+          # KIBANA WEB UI ACCESS
+          # ===================
+          # Kibana dashboard and log visualization interface
+          # Used for: Log analysis, dashboard creation, data exploration
+          - path: /kibana(/|$)(.*)              # Regex: /kibana/xxx -> /xxx
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: kibana                    # Kibana service
+                port:
+                  number: 5601                  # Standard Kibana web port
+
+{{- end }}

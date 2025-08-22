@@ -1,0 +1,39 @@
+global:
+  namespace: tracing
+
+# Sub-path configuration for reverse proxy scenarios
+subPath:
+  enabled: false
+  basePath: ""
+  externalHost: ""
+
+image:
+  repository: jaegertracing/all-in-one
+  tag: "1.47"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  ports:
+    ui: 16686
+    udp: 6831
+
+resources:
+  limits:
+    cpu: 300m
+    memory: 512Mi
+  requests:
+    cpu: 50m
+    memory: 128Mi
+
+podSecurityContext:
+  fsGroup: 10001
+
+securityContext:
+  runAsUser: 10001
+  runAsGroup: 10001
+  runAsNonRoot: true
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false

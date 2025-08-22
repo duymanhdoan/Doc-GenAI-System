@@ -1,0 +1,30 @@
+global:
+  namespace: logging
+
+image:
+  repository: docker.elastic.co/kibana/kibana
+  tag: 8.8.0
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 5601
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "200m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+
+config:
+  serverName: "kibana"
+  serverHost: "0.0.0.0"
+  serverBasePath: "/kibana"
+  serverRewriteBasePath: true
+  elasticsearchHosts: "http://elasticsearch:9200"
+  xpackLicenseManagementEnabled: false
+  xpackSecurityEnabled: false

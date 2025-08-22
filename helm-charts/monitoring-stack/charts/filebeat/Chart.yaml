@@ -1,0 +1,6 @@
+apiVersion: v2
+name: filebeat
+description: Filebeat Helm chart for log collection
+type: application
+version: 0.1.0
+appVersion: "8.8.0"

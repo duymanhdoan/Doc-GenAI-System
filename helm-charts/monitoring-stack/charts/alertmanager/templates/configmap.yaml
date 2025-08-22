@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "alertmanager.fullname" . }}-config
+  namespace: {{ .Values.global.namespace | default .Release.Namespace | default "observability" }}
+  labels:
+    {{- include "alertmanager.labels" . | nindent 4 }}
+data:
+  config.yml: |
+    global:
+      smtp_smarthost: '{{ .Values.global.smtp.smarthost | default "localhost:587" }}'
+      smtp_from: '{{ .Values.global.smtp.from | default "alertmanager@localhost" }}'
+
+    route:
+      group_by: ['alertname']
+      group_wait: 5s
+      group_interval: 10s
+      repeat_interval: 15s
+      receiver: 'discord'
+
+    receivers:
+    - name: 'discord'
+      discord_configs:
+      - webhook_url: '{{ .Values.config.discordWebhook }}'
+        send_resolved: true
+        title: 'Prometheus Alert - {{`{{ .Status | toUpper }}`}}'
+        message: |
+          {{`{{ range .Alerts }}`}}
+          **Alert:** {{`{{ .Annotations.summary }}`}}
+          **Description:** {{`{{ .Annotations.description }}`}}
+          **Severity:** {{`{{ .Labels.severity }}`}}
+          **Status:** {{`{{ .Status }}`}}
+          {{`{{ end }}`}}

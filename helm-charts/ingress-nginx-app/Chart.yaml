@@ -1,0 +1,6 @@
+apiVersion: v2
+name: nginx-app
+description: Nginx Ingress Controller for external access to monitoring services
+type: application
+version: 0.3.0
+appVersion: "1.10.0"

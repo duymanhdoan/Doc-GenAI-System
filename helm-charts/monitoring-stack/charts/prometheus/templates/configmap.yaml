@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "prometheus.fullname" . }}-config
+  namespace: {{ .Values.global.namespace | default .Release.Namespace | default "observability" }}
+  labels:
+    {{- include "prometheus.labels" . | nindent 4 }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: {{ .Values.config.scrapeInterval }}
+      evaluation_interval: {{ .Values.config.evaluationInterval }}
+
+    rule_files:
+      - "alert-rules.yml"
+
+    {{- if .Values.alerting.enabled }}
+    alerting:
+      alertmanagers:
+      - kubernetes_sd_configs:
+        - role: service
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_component]
+          regex: alertmanager
+          action: keep
+        - source_labels: [__meta_kubernetes_service_port_name]
+          regex: web
+          action: keep
+    {{- end }}
+
+    scrape_configs:
+      - job_name: 'node-exporter'
+        scrape_interval: 5s
+        kubernetes_sd_configs:
+        - role: pod
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+          regex: node-exporter
+          action: keep
+        - source_labels: [__meta_kubernetes_pod_ip]
+          target_label: __address__
+          replacement: $1:9100
+
+      - job_name: 'cadvisor'
+        scrape_interval: 5s
+        kubernetes_sd_configs:
+        - role: pod
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+          regex: cadvisor
+          action: keep
+        - source_labels: [__meta_kubernetes_pod_ip]
+          target_label: __address__
+          replacement: $1:8080
+
+      - job_name: 'prometheus'
+        scrape_interval: 10s
+        static_configs:
+          - targets: ['localhost:9090']
+
+      - job_name: 'grafana'
+        scrape_interval: 15s
+        kubernetes_sd_configs:
+        - role: service
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_component]
+          regex: grafana
+          action: keep
+        - source_labels: [__meta_kubernetes_service_port_name]
+          regex: http
+          action: keep
+
+  alert-rules.yml: |
+    groups:
+    - name: System alerts
+      rules:
+      - alert: NodeOutOfMemory
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100 < 5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Node out of memory
+          description: Node memory has reached {{ "{{ humanize $value}}" }}%
+
+    - name: Containers
+      rules:
+      - alert: OCRHighMemory
+        expr: sum(rate(container_cpu_usage_seconds_total{name="demo-metrics"}[5m]))*100 > 100
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: OCR high memory usage
+          description: OCR memory consumption is at {{ "{{ humanize $value}}" }}%

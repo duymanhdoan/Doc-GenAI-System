@@ -1,0 +1,119 @@
+{{- if .Values.monitoring.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.monitoring.observability.ingressName }}
+  namespace: {{ .Values.monitoring.observability.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "nginx-ingress-controller.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: monitoring-ingress
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    {{- with .Values.monitoring.observability.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if .Values.ingressClass.name }}
+  ingressClassName: {{ .Values.ingressClass.name }}
+  {{- end }}
+  rules:
+  {{- range .Values.monitoring.hosts }}
+  - host: {{ .host | quote }}
+    http:
+      paths:
+      {{- range .paths }}
+      {{- if ne .service "jaeger" }}
+      - path: {{ .path }}(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: {{ .service }}
+            port:
+              number: {{ .port }}
+      {{- end }}
+      {{- end }}
+  {{- end }}
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.monitoring.tracing.ingressName }}
+  namespace: {{ .Values.monitoring.tracing.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include ".name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: tracing-ingress
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    {{- with .Values.monitoring.tracing.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if .Values.ingressClass.name }}
+  ingressClassName: {{ .Values.ingressClass.name }}
+  {{- end }}
+  rules:
+  {{- range .Values.monitoring.hosts }}
+  - host: {{ .host | quote }}
+    http:
+      paths:
+      {{- range .paths }}
+      {{- if eq .service "jaeger" }}
+      - path: {{ .path }}(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: {{ .service }}
+            port:
+              number: {{ .port }}
+      {{- end }}
+      {{- end }}
+  {{- end }}
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: logging-ingress
+  namespace: logging
+  labels:
+    app.kubernetes.io/name: {{ include "nginx-ingress-controller.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: logging-ingress
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  {{- if .Values.ingressClass.name }}
+  ingressClassName: {{ .Values.ingressClass.name }}
+  {{- end }}
+  rules:
+  {{- range .Values.monitoring.hosts }}
+  - host: {{ .host | quote }}
+    http:
+      paths:
+      - path: /kibana
+        pathType: Prefix
+        backend:
+          service:
+            name: kibana
+            port:
+              number: 5601
+      - path: /elasticsearch(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: elasticsearch
+            port:
+              number: 9200
+  {{- end }}
+{{- end }}

@@ -1,0 +1,47 @@
+global:
+  namespace: observability
+
+image:
+  repository: prom/prometheus
+  tag: v2.38.0
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 9090
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+persistence:
+  enabled: true
+  size: 10Gi
+  accessMode: ReadWriteOnce
+  storageClass: ""
+
+# Container arguments configuration
+# Note: The external URL will be dynamically set from parent chart values
+args:
+  - --config.file=/etc/prometheus/prometheus.yml
+  - --storage.tsdb.path=/prometheus/
+  - --web.console.libraries=/etc/prometheus/console_libraries
+  - --web.console.templates=/etc/prometheus/consoles
+  - --web.enable-lifecycle
+  - --web.route-prefix=/
+
+# External URL configuration (will be overridden by parent chart)
+externalUrl: ""  # Will use global.protocol://global.externalHost/prometheus/
+
+config:
+  scrapeInterval: 15s
+  evaluationInterval: 15s
+  retention: 20h
+
+alerting:
+  enabled: true
+  alertmanagerEndpoint: ""  # Will use global.services.alertmanager

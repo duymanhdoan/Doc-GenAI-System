@@ -1,0 +1,38 @@
+{{- if .Values.grafana.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-files
+  namespace: {{ .Values.grafana.namespace | default .Values.global.observabilityNamespace | default "observability" }}
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: grafana
+    app.kubernetes.io/component: grafana
+data:
+  1860_rev31.json: |-
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Node Exporter Full",
+        "tags": ["node-exporter"],
+        "style": "dark",
+        "timezone": "browser",
+        "panels": [],
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "timepicker": {},
+        "templating": {
+          "list": []
+        },
+        "annotations": {
+          "list": []
+        },
+        "refresh": "30s",
+        "schemaVersion": 16,
+        "version": 0
+      }
+    }
+{{- end }}

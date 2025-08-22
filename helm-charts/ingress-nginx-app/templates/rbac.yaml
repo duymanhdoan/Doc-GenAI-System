@@ -1,0 +1,205 @@
+{{/*
+NGINX INGRESS CONTROLLER RBAC CONFIGURATION
+==========================================
+Complete Role-Based Access Control setup for the NGINX Ingress Controller
+to securely interact with Kubernetes API resources.
+
+SECURITY PRINCIPLE:
+- Principle of least privilege: Only grants minimum permissions required
+- Cluster-scoped permissions for cross-namespace ingress management
+- Separate service account for clear identity and audit trails
+
+PERMISSIONS OVERVIEW:
+- Service Discovery: Read services and endpoints for backend routing
+- Configuration Management: Manage ConfigMaps and Secrets for TLS and settings
+- Ingress Management: Watch Ingress resources and update their status
+- Event Logging: Create events for monitoring and troubleshooting
+- Leader Election: Coordinate multiple controller replicas (HA deployments)
+*/}}
+
+{{- if .Values.controller.serviceAccount.create }}
+# NGINX INGRESS CONTROLLER SERVICE ACCOUNT
+# ========================================
+# Kubernetes identity for the ingress controller pods
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  # SERVICE ACCOUNT IDENTIFICATION
+  # =============================
+  name: {{ .Values.controller.serviceAccount.name }}   # Service account name from values.yaml
+  namespace: {{ .Values.namespace.name }}              # Ingress controller namespace
+  labels:
+    # KUBERNETES RECOMMENDED LABELS
+    # ============================
+    app.kubernetes.io/name: {{ .Values.controller.name }}       # Controller identifier
+    app.kubernetes.io/component: controller                     # Component type  
+    app.kubernetes.io/instance: {{ .Release.Name }}             # Helm release instance
+    app.kubernetes.io/managed-by: {{ .Release.Service }}        # Managed by Helm
+    # RBAC LABELS
+    # ===========
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"         # Allow edit access
+  annotations:
+    # CLOUD PROVIDER ANNOTATIONS
+    # =========================
+    # Additional annotations for cloud-specific IAM integration
+    {{- with .Values.controller.serviceAccount.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    # SERVICE ACCOUNT ANNOTATIONS
+    # ==========================
+    kubernetes.io/service-account.name: "{{ .Values.controller.serviceAccount.name }}"
+{{- end }}
+---
+{{- if .Values.rbac.create }}
+# NGINX INGRESS CONTROLLER CLUSTER ROLE
+# =====================================
+# Defines cluster-wide permissions for ingress controller operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  # CLUSTER ROLE IDENTIFICATION
+  # ===========================
+  name: {{ .Values.rbac.clusterRole.name }}            # ClusterRole name from values.yaml
+  labels:
+    # KUBERNETES RECOMMENDED LABELS
+    # ============================
+    app.kubernetes.io/name: {{ .Values.controller.name }}       # Controller identifier
+    app.kubernetes.io/component: controller                     # Component type
+    app.kubernetes.io/instance: {{ .Release.Name }}             # Helm release instance
+    app.kubernetes.io/managed-by: {{ .Release.Service }}        # Managed by Helm
+    # RBAC LABELS
+    # ===========
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"        # Aggregate to admin role
+    
+# PERMISSION RULES DEFINITION
+# ===========================
+# Each rule grants specific API access for ingress controller functionality
+rules:
+# SERVICE DISCOVERY PERMISSIONS
+# =============================
+# Required for discovering backend services and their endpoints for routing
+- apiGroups: [""]                        # Core API group
+  resources: ["services", "endpoints"]    # Services and their endpoints
+  verbs: ["get", "list", "watch"]         # Read and watch operations
+  # PURPOSE: Discover OCR service, Grafana, Prometheus, Jaeger, Kibana services
+  # USAGE: Dynamic backend routing configuration for ingress rules
+
+# TLS CERTIFICATE AND SECRET MANAGEMENT
+# ====================================
+# Access to Secrets for TLS certificates and authentication tokens
+- apiGroups: [""]                        # Core API group  
+  resources: ["secrets"]                  # Secret resources
+  verbs: ["get", "list", "watch"]         # Read and watch operations
+  # PURPOSE: Access TLS certificates for HTTPS termination
+  # USAGE: Load SSL certificates for secure communication to observability services
+
+# CONFIGURATION MANAGEMENT
+# ========================
+# Manage ConfigMaps for NGINX configuration and custom settings
+- apiGroups: [""]                        # Core API group
+  resources: ["configmaps"]               # ConfigMap resources  
+  verbs: ["get", "list", "watch", "update", "create"]  # Full CRUD operations
+  # PURPOSE: Store and update NGINX configuration, custom snippets
+  # USAGE: Dynamic configuration updates for observability platform routing
+
+# POD INSPECTION
+# =============
+# Monitor pods for health and readiness status
+- apiGroups: [""]                        # Core API group
+  resources: ["pods"]                     # Pod resources
+  verbs: ["get", "list", "watch"]         # Read and watch operations
+  # PURPOSE: Monitor ingress controller and backend pod status
+  # USAGE: Health checking and load balancing decisions
+
+# EVENT CREATION
+# =============
+# Create events for monitoring and troubleshooting
+- apiGroups: [""]                        # Core API group
+  resources: ["events"]                   # Event resources
+  verbs: ["create", "patch"]              # Create and update operations
+  # PURPOSE: Log ingress controller activities and errors
+  # USAGE: Troubleshooting routing issues and configuration problems
+
+# INGRESS RESOURCE MANAGEMENT  
+# ==========================
+# Core ingress functionality - read ingress rules across all namespaces
+- apiGroups: ["extensions", "networking.k8s.io"]  # Legacy and current ingress APIs
+  resources: ["ingresses"]                         # Ingress resources
+  verbs: ["get", "list", "watch"]                  # Read and watch operations
+  # PURPOSE: Monitor ingress rules for OCR, Grafana, Prometheus, Jaeger, Kibana
+  # USAGE: Convert ingress rules to NGINX configuration for traffic routing
+
+# INGRESS STATUS UPDATES
+# =====================
+# Update ingress status with load balancer IP and condition information
+- apiGroups: ["extensions", "networking.k8s.io"]  # Legacy and current ingress APIs
+  resources: ["ingresses/status"]                  # Ingress status subresource
+  verbs: ["update"]                                # Update operations only
+  # PURPOSE: Report load balancer IP and readiness status
+  # USAGE: Update ingress status with external IP (34.142.154.84.nip.io)
+
+# INGRESS CLASS MANAGEMENT
+# =======================
+# Manage IngressClass resources for controller selection
+- apiGroups: ["networking.k8s.io"]        # Networking API group
+  resources: ["ingressclasses"]            # IngressClass resources
+  verbs: ["get", "list", "watch"]          # Read and watch operations
+  # PURPOSE: Determine which ingress resources this controller should handle
+  # USAGE: Filter ingress resources based on ingressClassName: nginx
+
+# ENDPOINT SLICE ACCESS
+# ====================
+# Modern endpoint discovery for improved performance
+- apiGroups: ["discovery.k8s.io"]         # Service discovery API group
+  resources: ["endpointslices"]            # EndpointSlice resources
+  verbs: ["get", "list", "watch"]          # Read and watch operations  
+  # PURPOSE: Efficient service endpoint discovery for large clusters
+  # USAGE: Alternative to Endpoints API for better scalability
+
+# LEADER ELECTION
+# ==============
+# Coordinate multiple ingress controller replicas in HA deployments
+- apiGroups: ["coordination.k8s.io"]      # Coordination API group
+  resources: ["leases"]                    # Lease resources for leader election
+  verbs: ["get", "list", "watch", "create", "update"]  # Full lifecycle operations
+  # PURPOSE: High availability with multiple controller replicas
+  # USAGE: Ensure only one controller processes ingress changes at a time
+---
+# NGINX INGRESS CONTROLLER CLUSTER ROLE BINDING
+# ==============================================
+# Binds the ClusterRole permissions to the ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  # CLUSTER ROLE BINDING IDENTIFICATION
+  # ==================================
+  name: {{ .Values.rbac.clusterRoleBinding.name }}   # ClusterRoleBinding name from values.yaml
+  labels:
+    # KUBERNETES RECOMMENDED LABELS
+    # ============================
+    app.kubernetes.io/name: {{ .Values.controller.name }}       # Controller identifier
+    app.kubernetes.io/component: controller                     # Component type
+    app.kubernetes.io/instance: {{ .Release.Name }}             # Helm release instance
+    app.kubernetes.io/managed-by: {{ .Release.Service }}        # Managed by Helm
+    # RBAC LABELS
+    # ===========
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"        # Aggregate to admin role
+
+# ROLE REFERENCE
+# =============
+# References the ClusterRole that defines the permissions
+roleRef:
+  apiGroup: rbac.authorization.k8s.io      # RBAC API group
+  kind: ClusterRole                        # Resource type being referenced
+  name: {{ .Values.rbac.clusterRole.name }} # ClusterRole name (must match above)
+  
+# SUBJECT BINDING
+# ==============
+# Specifies which ServiceAccount receives the permissions  
+subjects:
+- kind: ServiceAccount                     # Subject type
+  name: {{ .Values.controller.serviceAccount.name }}  # ServiceAccount name
+  namespace: {{ .Values.namespace.name }}  # ServiceAccount namespace
+  # PURPOSE: Grant cluster-wide permissions to ingress controller pods
+  # USAGE: Allows ingress controller to manage resources across all namespaces
+{{- end }}

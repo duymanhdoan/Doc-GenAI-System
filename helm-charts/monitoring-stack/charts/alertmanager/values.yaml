@@ -1,0 +1,31 @@
+global:
+  namespace: observability
+  smtp:
+    smarthost: "localhost:587"
+    from: "alertmanager@example.com"
+
+image:
+  repository: prom/alertmanager
+  tag: v0.25.0
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 9093
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 32Mi
+
+persistence:
+  enabled: true
+  size: 2Gi
+  accessMode: ReadWriteOnce
+  storageClass: ""
+
+config:
+  discordWebhook: "https://discord.com/api/webhooks/1209791727544569936/9uV0czwN2SINvRq4KX-vHg2xZom_bt0BfLXEQGjvtuHU99dH2IMfTv40FVn4InljYwmB"

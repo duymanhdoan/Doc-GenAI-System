@@ -1,0 +1,97 @@
+# OBSERVABILITY MONITORING STACK - UMBRELLA HELM CHART
+# ====================================================
+# This umbrella chart orchestrates the complete observability platform implementing
+# the three pillars of observability: Metrics, Logging, and Tracing.
+#
+# CHART ARCHITECTURE:
+# - Umbrella chart pattern for managing multiple sub-charts
+# - Conditional deployment of components via enabled/disabled flags
+# - Shared global configuration across all sub-charts
+# - Centralized dependency management and versioning
+#
+# OBSERVABILITY PILLARS IMPLEMENTATION:
+# 1. METRICS PILLAR (Prometheus ecosystem):
+#    - Prometheus: Time-series metrics collection and storage
+#    - Grafana: Metrics visualization and dashboards
+#    - AlertManager: Alerting and notification management
+#    - Node Exporter: Host system metrics collection
+#    - cAdvisor: Container metrics collection
+#
+# 2. LOGGING PILLAR (ELK stack):
+#    - Elasticsearch: Distributed log storage and search
+#    - Kibana: Log visualization and analysis
+#    - Filebeat: Log collection and forwarding agent
+#
+# 3. TRACING PILLAR (Jaeger ecosystem):
+#    - Jaeger: Distributed tracing collection and UI
+#    - OpenTelemetry integration: Application instrumentation
+#
+# DEPLOYMENT WORKFLOW:
+# 1. helm dependency update (downloads/updates sub-chart dependencies)
+# 2. helm install monitoring-stack . (deploys entire stack)
+# 3. Individual components can be enabled/disabled via values.yaml
+# 4. Cross-component configuration handled via global values
+#
+# NAMESPACE STRATEGY:
+# - observability: Core monitoring components (Prometheus, Grafana, etc.)
+# - logging: ELK stack components (Elasticsearch, Kibana, Filebeat)
+# - Separation enables different RBAC, network policies, and resource quotas
+
+apiVersion: v2
+name: monitoring-stack
+description: Complete Observability Monitoring Stack with ELK Integration
+type: application
+version: 0.6.0
+appVersion: "1.0.0"
+
+# SUB-CHART DEPENDENCIES
+# Each dependency represents a component of the observability platform
+# All use local file:// repositories for self-contained deployment
+dependencies:
+  # METRICS PILLAR - Prometheus Ecosystem
+  - name: prometheus
+    version: 0.1.0
+    repository: "file://./charts/prometheus"    # Time-series metrics collection
+    condition: prometheus.enabled
+
+  - name: grafana
+    version: 0.1.0
+    repository: "file://./charts/grafana"       # Metrics visualization dashboards
+    condition: grafana.enabled
+
+  - name: alertmanager
+    version: 0.1.0
+    repository: "file://./charts/alertmanager"  # Alert routing and notifications
+    condition: alertmanager.enabled
+
+  - name: node-exporter
+    version: 0.1.0
+    repository: "file://./charts/node-exporter" # Host system metrics (CPU, memory, disk)
+    condition: node-exporter.enabled
+
+  - name: cadvisor
+    version: 0.1.0
+    repository: "file://./charts/cadvisor"      # Container resource metrics
+    condition: cadvisor.enabled
+
+  # TRACING PILLAR - Distributed Tracing
+  - name: jaeger
+    version: 0.1.0
+    repository: "file://./charts/jaeger"        # Distributed tracing platform
+    condition: jaeger.enabled
+
+  # LOGGING PILLAR - ELK Stack
+  - name: elasticsearch
+    version: 0.1.0
+    repository: "file://./charts/elasticsearch" # Distributed log storage and search
+    condition: elasticsearch.enabled
+
+  - name: kibana
+    version: 0.1.0
+    repository: "file://./charts/kibana"        # Log visualization and analysis
+    condition: kibana.enabled
+
+  - name: filebeat
+    version: 0.1.0
+    repository: "file://./charts/filebeat"      # Log collection agent (DaemonSet)
+    condition: filebeat.enabled

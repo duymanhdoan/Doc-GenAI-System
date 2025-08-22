@@ -1,0 +1,66 @@
+global:
+  namespace: observability
+
+image:
+  repository: grafana/grafana
+  tag: 9.0.5
+  pullPolicy: IfNotPresent
+
+service:
+  type: NodePort
+  port: 3000
+  nodePort: 30000
+
+resources:
+  limits:
+    cpu: 300m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+persistence:
+  enabled: true
+  size: 5Gi
+  accessMode: ReadWriteOnce
+  storageClass: ""
+
+admin:
+  user: ""  # Will use global.adminCredentials.user
+  password: ""  # Will use global.adminCredentials.password
+
+config:
+  server:
+    root_url: "%(protocol)s://%(domain)s:%(http_port)s/grafana/"
+    serve_from_sub_path: true
+
+podSecurityContext:
+  fsGroup: 472
+
+securityContext:
+  runAsUser: 472
+  runAsGroup: 472
+  runAsNonRoot: true
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+
+datasources:
+  prometheus:
+    url: http://prometheus:9090
+    isDefault: true
+  alertmanager:
+    url: http://alertmanager:9093
+    isDefault: false
+
+healthcheck:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 10
+
+dashboards:
+  enabled: true
+  path: /opt/grafana/dashboards
