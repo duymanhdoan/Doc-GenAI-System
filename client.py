@@ -26,7 +26,7 @@ def predict():
             
             # Send POST request to correct OCR endpoint
             response = requests.post(
-                "http://34.126.101.135.nip.io/",  # Correct OCR endpoint
+                "http://34.142.154.84.nip.io/ocr-app/process",  # Correct OCR endpoint
                 headers={
                     "accept": "application/json",
                 },
