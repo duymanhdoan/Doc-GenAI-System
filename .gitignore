@@ -18,6 +18,7 @@ bin-file/*
 .serena/ 
 
 # Terraform file 
+Iac/terraform/trash/ 
 Iac/terraform/.terraform 
 Iac/terraform/.terraform.lock.hcl
 Iac/terraform/terraform.tfstate

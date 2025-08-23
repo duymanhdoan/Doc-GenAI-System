@@ -1,4 +1,4 @@
-## How-to Guide Deploy code ANSIBLE
+## DEPLOY COMPUTER ENGINE VIA ANSIBLE
 ### 1. Install prerequisites
 ```shell
 pip install -r requirements.txt
@@ -37,7 +37,7 @@ After your instance has been started as the folowing image, get the External IP 
 , now, you should be able to access your application via `http://104.198.109.131:30000/docs`
 
 
-## How-to Guide Deploy code TERRAFORM 
+## DEPLOY K8S TO GOOGLE CLOUD BY TERRAFORM 
 ### Install Terraform for Ubuntu 22.04
 https://computingforgeeks.com/how-to-install-terraform-on-ubuntu/
 
@@ -50,11 +50,14 @@ gcloud auth application-default login
 ## Provision a new cluster
 ```shell
 terraform init
-terraform plan
-terraform apply
+terraform plan -var-file="dev.terraform.tfvars"
+terraform apply -var-file="dev.terraform.tfvars"
 ```
 
-
+## Del clusters 
+```shell 
+terraform destroy -var-file="terraform.tfvars"
+```
 
 ### The error 
 The IPv6 Error Context:
