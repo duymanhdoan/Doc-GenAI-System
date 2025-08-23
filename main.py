@@ -576,7 +576,7 @@ async def root():
     - Documentation tools can auto-discover API structure
     
     NGINX Ingress Routing:
-    - Available at http://34.126.101.135.nip.io/ (root)
+    - Available at externalHost in values.yaml files (root)
     - Redirects users to OCR-specific endpoints
     - Provides clear navigation for new users
     """

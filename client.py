@@ -3,6 +3,8 @@ import os
 import requests
 from loguru import logger
 
+root_url = "http://34.142.154.59.nip.io/ocr-app/process" # Correct OCR endpoint "http://34.142.154.84.nip.io/ocr-app/process",
+
 def predict():
     """Send OCR prediction request"""
     logger.info("Sending POST request to OCR API...")
@@ -26,7 +28,7 @@ def predict():
             
             # Send POST request to correct OCR endpoint
             response = requests.post(
-                "http://34.142.154.84.nip.io/ocr-app/process",  # Correct OCR endpoint
+                root_url,  # Correct OCR endpoint "http://34.142.154.84.nip.io/ocr-app/process",
                 headers={
                     "accept": "application/json",
                 },
