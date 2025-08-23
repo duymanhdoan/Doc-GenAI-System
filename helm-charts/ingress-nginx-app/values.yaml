@@ -12,7 +12,7 @@
 # - Enables access to Kibana for centralized log analysis
 #
 # LOAD BALANCER ARCHITECTURE:
-# - Single external IP (34.142.154.84.nip.io) for all services
+# - Single external IP for all services
 # - Path-based routing with intelligent rewriting rules
 # - Support for large file uploads (OCR image processing)
 # - Optimized timeouts for different service types

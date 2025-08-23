@@ -136,7 +136,7 @@ rules:
   resources: ["ingresses/status"]                  # Ingress status subresource
   verbs: ["update"]                                # Update operations only
   # PURPOSE: Report load balancer IP and readiness status
-  # USAGE: Update ingress status with external IP (34.142.154.84.nip.io)
+  # USAGE: Update ingress status with external IP 
 
 # INGRESS CLASS MANAGEMENT
 # =======================

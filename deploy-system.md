@@ -25,8 +25,9 @@ gcloud container clusters get-credentials NAME [--dns-endpoint] [--internal-ip] 
 ### install nginx-app 
 ```bash
 cd ./helm-charts/ingress-nginx-app/
-helm install nginx-app . --namespace ingress-nginx --create-namespace
+helm upgrade --install nginx-app . --namespace ingress-nginx --create-namespace
 helm uninstall nginx-app -n ngress-nginx 
+helm upgrade --install nginx-app . --namespace ingress-nginx 
 
 ``` 
 ### get internal IP  
@@ -35,16 +36,15 @@ k get svc --all-namespaces
 copy the EXTERNAL-IP of ingress-nginx namespace 
 
 # update external host 
+"34.142.154.84.nip.io"
 # nginx-app 
 ../helm-charts/ingress-nginx-app/values.yaml
-..helm-charts/ingress-nginx-app/templates/rbac.yaml
-../helm-charts/ingress-nginx-app/templates/rbac.yaml
+#monitoring-stack
+../helm-charts/monitoring-stack/values.yaml
 # ocr-app
 ../helm-charts/ocr-app/values.yaml 
 ../client.py
 ../main.py
-#monitoring-stack
-../helm-charts/monitoring-stack/values.yaml
 
 
 # add host to local computers. 
