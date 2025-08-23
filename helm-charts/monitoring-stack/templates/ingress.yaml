@@ -116,7 +116,17 @@ metadata:
     # =================================
     nginx.ingress.kubernetes.io/ssl-redirect: "false"    # Allow HTTP access
     nginx.ingress.kubernetes.io/use-regex: "true"        # Enable regex path matching
-    nginx.ingress.kubernetes.io/rewrite-target: /$2      # Rewrite using capture group 2
+    
+    # CUSTOM PATH REWRITING FOR ELK STACK
+    # ===================================
+    # Different rewriting strategy for each service:
+    # - Elasticsearch: Strip /elasticsearch prefix (rewrite)
+    # - Kibana: Preserve full path (no rewrite, uses serverBasePath)
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      # Only rewrite Elasticsearch paths, preserve Kibana paths
+      if ($uri ~ ^/elasticsearch(/|$)(.*)) {
+        rewrite ^/elasticsearch(/|$)(.*) /$2 break;
+      }
     
     # LOGGING-SPECIFIC ANNOTATIONS
     # ===========================
@@ -140,8 +150,8 @@ spec:
           # =======================
           # Direct access to Elasticsearch REST API
           # Used for: Index management, search queries, debugging
-          - path: /elasticsearch(/|$)(.*)        # Regex: /elasticsearch/xxx -> /xxx
-            pathType: ImplementationSpecific
+          - path: /elasticsearch
+            pathType: Prefix
             backend:
               service:
                 name: elasticsearch             # Elasticsearch service
@@ -152,8 +162,9 @@ spec:
           # ===================
           # Kibana dashboard and log visualization interface
           # Used for: Log analysis, dashboard creation, data exploration
-          - path: /kibana(/|$)(.*)              # Regex: /kibana/xxx -> /xxx
-            pathType: ImplementationSpecific
+          # Kibana paths are preserved and forwarded as-is (uses serverBasePath)
+          - path: /kibana
+            pathType: Prefix
             backend:
               service:
                 name: kibana                    # Kibana service

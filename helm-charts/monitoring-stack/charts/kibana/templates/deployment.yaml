@@ -39,6 +39,14 @@ spec:
               value: {{ .Values.config.elasticsearchHosts }}
             - name: XPACK_SECURITY_ENABLED
               value: "false"
+            {{- if .Values.config.cspRules }}
+            - name: CSP_SCRIPT_SRC
+              value: {{ .Values.config.cspScriptSrc | default "'self' 'unsafe-inline' 'unsafe-eval'" | quote }}
+            - name: CSP_STYLE_SRC
+              value: {{ .Values.config.cspStyleSrc | default "'self' 'unsafe-inline' https://fonts.googleapis.com" | quote }}
+            - name: CSP_FONT_SRC
+              value: {{ .Values.config.cspFontSrc | default "'self' https://fonts.gstatic.com" | quote }}
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           readinessProbe:

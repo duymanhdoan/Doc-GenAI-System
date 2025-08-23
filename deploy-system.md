@@ -111,4 +111,7 @@ kubectl exec -n observability deployment/prometheus -- wget -qO- --timeout=5 htt
 
 curl -s http://localhost:9094/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, instance: .labels.instance, health: .health}'
 
+
+
+
 ``` 

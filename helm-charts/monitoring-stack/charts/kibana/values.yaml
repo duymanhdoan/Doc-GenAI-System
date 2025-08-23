@@ -28,3 +28,7 @@ config:
   elasticsearchHosts: "http://elasticsearch:9200"
   xpackLicenseManagementEnabled: false
   xpackSecurityEnabled: false
+  cspRules: true
+  cspScriptSrc: "'self' 'unsafe-inline' 'unsafe-eval'"
+  cspStyleSrc: "'self' 'unsafe-inline' https://fonts.googleapis.com"
+  cspFontSrc: "'self' https://fonts.gstatic.com"
