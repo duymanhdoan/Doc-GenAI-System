@@ -1,0 +1,41 @@
+{{/*
+JAEGER INGRESS TEMPLATE
+======================
+Provides external HTTP access to Jaeger UI for TRACES monitoring flow
+Maps parent chart global configuration to jaeger-specific ingress rules
+*/}}
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "jaeger.fullname" . }}-ingress
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "jaeger.labels" . | nindent 4 }}
+    {{- with .Values.global.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    app.kubernetes.io/component: ingress
+    observability.flow: traces
+    observability.component: storage
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  rules:
+  - host: {{ .Values.global.externalHost | default .Values.ingress.host }}
+    http:
+      paths:
+      {{- range .Values.ingress.paths }}
+      - path: {{ .path }}
+        pathType: {{ .pathType }}
+        backend:
+          service:
+            name: {{ include "jaeger.fullname" $ }}
+            port:
+              number: {{ .backend.service.port.number }}
+      {{- end }}
+{{- end }}

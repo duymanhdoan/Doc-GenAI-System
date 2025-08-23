@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "grafana.fullname" . }}-ingress
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "grafana.labels" . | nindent 4 }}
+    {{- with .Values.global.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    app.kubernetes.io/component: ingress
+    observability.flow: metrics
+    observability.component: visualization
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      # Grafana path rewriting for proper sub-path access
+      # Preserves /grafana prefix for correct dashboard routing
+      rewrite ^/grafana/(.*)$ /$1 break;
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.global.externalHost | default "34.142.154.59.nip.io" }}
+      http:
+        paths:
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "grafana.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}

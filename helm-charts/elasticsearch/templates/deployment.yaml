@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "elasticsearch.fullname" . }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "elasticsearch.labels" . | nindent 4 }}
+    {{- with .Values.global.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    observability.flow: logs
+    observability.component: storage
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "elasticsearch.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "elasticsearch.selectorLabels" . | nindent 8 }}
+    spec:
+      initContainers:
+        - name: fix-permissions
+          image: busybox:1.36.1
+          command: ['sh', '-c', 'chown -R 1000:1000 /usr/share/elasticsearch/data']
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: elasticsearch-data
+              mountPath: /usr/share/elasticsearch/data
+        - name: fix-vm-max-map-count
+          image: busybox:1.36.1
+          command: ['sh', '-c', 'sysctl -w vm.max_map_count=262144 || true']
+          securityContext:
+            privileged: true
+      containers:
+        - name: elasticsearch
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 9200
+              protocol: TCP
+            - name: transport
+              containerPort: 9300
+              protocol: TCP
+          env:
+            - name: cluster.name
+              value: {{ .Values.config.clusterName }}
+            - name: network.host
+              value: {{ .Values.config.networkHost }}
+            - name: discovery.type
+              value: {{ .Values.config.discoveryType }}
+            - name: xpack.security.enabled
+              value: "{{ .Values.config.xpackSecurityEnabled }}"
+            - name: ES_JAVA_OPTS
+              value: {{ .Values.config.javaOpts }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: elasticsearch-data
+              mountPath: /usr/share/elasticsearch/data
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+            initialDelaySeconds: 180
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - name: elasticsearch-data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "elasticsearch.fullname" . }}-pvc
+          {{- else }}
+          emptyDir: {}
+          {{- end }}

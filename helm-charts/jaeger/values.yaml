@@ -1,0 +1,100 @@
+# JAEGER CONFIGURATION WITH PARENT CHART INTEGRATION
+# ==================================================
+# This configuration maps parent monitoring-stack values to jaeger subchart
+# Ensures compliance with TRACES monitoring flow requirements
+
+# PARENT CHART GLOBAL CONFIGURATION MAPPING
+# ==========================================
+# Inherits from parent monitoring-stack global values
+global:
+  # Namespace assignment for TRACES flow
+  namespace: tracing
+  tracingNamespace: tracing
+  
+  # External access configuration
+  externalHost: "34.87.137.82.nip.io"
+  protocol: "http"
+  
+  # Common labels for monitoring-stack integration
+  commonLabels:
+    app.kubernetes.io/part-of: monitoring-stack
+    app.kubernetes.io/managed-by: helm
+    observability.flow: traces
+    observability.component: storage
+  
+  # Image pull policy
+  imagePullPolicy: IfNotPresent
+  
+  # Admin credentials for Jaeger
+  adminCredentials:
+    user: admin
+    password: admin
+  
+  # Service URLs for internal TRACES flow communication
+  services:
+    jaeger: "jaeger:16686"
+
+# Sub-path configuration for reverse proxy scenarios
+subPath:
+  enabled: true
+  basePath: "/jaeger"
+  externalHost: ""  # Will use global.externalHost
+
+# JAEGER DEPLOYMENT CONFIGURATION
+# ===============================
+image:
+  repository: jaegertracing/all-in-one
+  tag: "1.47"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  ports:
+    ui: 16686
+    udp: 6831
+
+resources:
+  limits:
+    cpu: 300m
+    memory: 512Mi
+  requests:
+    cpu: 50m
+    memory: 128Mi
+
+podSecurityContext:
+  fsGroup: 10001
+
+securityContext:
+  runAsUser: 10001
+  runAsGroup: 10001
+  runAsNonRoot: true
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+
+# NGINX INGRESS CONFIGURATION FOR TRACES FLOW
+# ===========================================
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      # Jaeger UI special handling - preserve multi-path structure
+      # Jaeger UI requires paths like /search, /trace, /static to work correctly
+      if ($request_uri ~ "^/jaeger/(search|trace|api|static)(.*)") {
+        rewrite ^/jaeger/(.*)$ /$1 break;
+      }
+  host: "" # Will use global.externalHost
+  paths:
+    - path: /jaeger
+      pathType: Prefix
+      backend:
+        service:
+          name: jaeger
+          port:
+            number: 16686

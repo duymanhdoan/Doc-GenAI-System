@@ -13,7 +13,7 @@ env:
   - name: MODEL_PATH
     value: ./my_model/
   - name: JAEGER_AGENT_HOST
-    value: "monitoring-stack-jaeger.tracing.svc.cluster.local"
+    value: "jaeger.tracing.svc.cluster.local"
   - name: JAEGER_AGENT_PORT
     value: "6831"
   - name: JAEGER_SERVICE_NAME
@@ -67,7 +67,7 @@ ingress:
     # Rewrite configuration - pass through paths as-is
     nginx.ingress.kubernetes.io/use-regex: "true"
   hosts:
-    - host: "34.142.154.84.nip.io"
+    - host: "34.142.154.59.nip.io"  # "34.142.154.84.nip.io"
       paths:
         # OCR app endpoints with /ocr-app prefix
         - path: /ocr-app

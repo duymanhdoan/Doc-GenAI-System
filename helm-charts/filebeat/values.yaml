@@ -1,0 +1,93 @@
+# FILEBEAT CONFIGURATION WITH PARENT CHART INTEGRATION
+# ====================================================
+# This configuration maps parent monitoring-stack values to filebeat subchart
+# Ensures compliance with LOGS monitoring flow requirements
+
+# PARENT CHART GLOBAL CONFIGURATION MAPPING
+# ==========================================
+# Inherits from parent monitoring-stack global values
+global:
+  # Namespace assignment for LOGS flow
+  namespace: logging
+  loggingNamespace: logging
+  
+  # External access configuration
+  externalHost: "34.87.137.82.nip.io"
+  protocol: "http"
+  
+  # Common labels for monitoring-stack integration
+  commonLabels:
+    app.kubernetes.io/part-of: monitoring-stack
+    app.kubernetes.io/managed-by: helm
+    observability.flow: logs
+    observability.component: collector
+  
+  # Image pull policy
+  imagePullPolicy: IfNotPresent
+  
+  # Admin credentials for Filebeat
+  adminCredentials:
+    user: admin
+    password: admin
+  
+  # Service URLs for internal LOGS flow communication
+  services:
+    elasticsearch: "elasticsearch:9200"
+    kibana: "kibana:5601"
+
+# FILEBEAT DEPLOYMENT CONFIGURATION
+# =================================
+image:
+  repository: docker.elastic.co/beats/filebeat
+  tag: 8.8.0
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "50m"
+  limits:
+    memory: "512Mi"
+    cpu: "200m"
+
+config:
+  elasticsearchHost: "http://elasticsearch:9200"  # Uses LOGS flow service discovery
+  logLevel: "info"
+  elasticPassword: ""
+
+# DaemonSet configuration for collecting logs from all nodes
+daemonset:
+  enabled: true
+  
+# Security context
+securityContext:
+  runAsUser: 0
+  privileged: true
+
+# SERVICE CONFIGURATION FOR LOGS FLOW
+# ===================================
+service:
+  type: ClusterIP
+  port: 5066  # Standard Filebeat monitoring port
+
+# NGINX INGRESS CONFIGURATION FOR LOGS FLOW (monitoring endpoint)
+# ===============================================================
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      # Filebeat monitoring endpoint access
+      rewrite ^/filebeat/(.*)$ /$1 break;
+  host: "" # Will use global.externalHost
+  paths:
+    - path: /filebeat
+      pathType: Prefix
+      backend:
+        service:
+          name: filebeat
+          port:
+            number: 5066

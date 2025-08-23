@@ -212,7 +212,7 @@ monitoring:
   # ============================
   # Host and path-based routing for all observability services
   hosts:
-    - host: "34.142.154.84.nip.io"       # Primary external domain
+    - host: "34.142.154.59.nip.io"       # Primary external domain: "34.142.154.84.nip.io" 
       paths:
         # METRICS VISUALIZATION (Pillar #1)
         # ================================
@@ -248,4 +248,4 @@ monitoring:
   # EXTERNAL IP CONFIGURATION
   # ========================
   # Should match the LoadBalancer external IP for DNS configuration
-  externalIP: "34.142.154.84"          # LoadBalancer external IP
+  externalIP: "34.142.154.59"          # LoadBalancer external IP

@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kibana.fullname" . }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "kibana.labels" . | nindent 4 }}
+    {{- with .Values.global.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    observability.flow: logs
+    observability.component: visualization
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "kibana.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kibana.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: kibana
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 5601
+              protocol: TCP
+          env:
+            - name: SERVER_NAME
+              value: {{ .Values.config.serverName }}
+            - name: SERVER_HOST
+              value: {{ .Values.config.serverHost }}
+            {{- if .Values.config.serverBasePath }}
+            - name: SERVER_BASEPATH
+              value: {{ .Values.config.serverBasePath }}
+            {{- end }}
+            {{- if .Values.config.serverRewriteBasePath }}
+            - name: SERVER_REWRITEBASEPATH
+              value: "{{ .Values.config.serverRewriteBasePath }}"
+            {{- end }}
+            - name: ELASTICSEARCH_HOSTS
+              value: {{ .Values.config.elasticsearchHosts }}
+            - name: XPACK_SECURITY_ENABLED
+              value: "false"
+            {{- if .Values.config.cspRules }}
+            - name: CSP_SCRIPT_SRC
+              value: "{{ .Values.config.cspScriptSrc | default "'self' 'unsafe-inline' 'unsafe-eval'" }}"
+            - name: CSP_STYLE_SRC
+              value: "{{ .Values.config.cspStyleSrc | default "'self' 'unsafe-inline' https://fonts.googleapis.com" }}"
+            - name: CSP_FONT_SRC
+              value: "{{ .Values.config.cspFontSrc | default "'self' https://fonts.gstatic.com" }}"
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: {{ if .Values.config.serverBasePath }}{{ .Values.config.serverBasePath }}{{ end }}/api/status
+              port: 5601
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: {{ if .Values.config.serverBasePath }}{{ .Values.config.serverBasePath }}{{ end }}/api/status
+              port: 5601
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            timeoutSeconds: 10
