@@ -54,4 +54,5 @@ dependencies:
       - resolvelib==1.0.1
       - rsa==4.9.1
       - urllib3==2.5.0
+      - uv==0.8.12
 prefix: ~/miniconda3/envs/ansible

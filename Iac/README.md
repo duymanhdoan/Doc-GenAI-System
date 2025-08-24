@@ -102,3 +102,9 @@ kubectl get pods -n argo-cd
 # Get ArgoCD admin password
 kubectl -n argo-cd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
 ```
+
+### to export env 
+```shell
+conda env export -n ansible > Iac/environment_deploy_k8s.yml
+
+```

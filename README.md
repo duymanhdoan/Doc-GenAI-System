@@ -52,6 +52,61 @@ Doc-GenAI-System/
 
 ## IV. Table of Contents
 
+- Deployment Instructions
+
+
+## 🚀 Deployment Instructions
+
+### Prerequisites
+
+Before you begin, ensure you have the following tools installed and configured:
+
+- **`gcloud`**: Authenticated to your GCP account.
+- **`terraform`** (v1.5.0+)
+- **`kubectl`**
+- **`helm`**
+- **`gke-gcloud-auth-plugin`**: Required for `kubectl` to authenticate with GKE
+
+### Phase 1: Provision the GKE Cluster with Terraform
+
+This phase uses Terraform to create the foundational Kubernetes cluster on GCP.
+
+1. **Navigate to the Terraform directory:**
+
+   ```bash
+   cd terraform  # Assuming your .tf files are in a 'terraform' directory
+   ```
+
+2. **Create your configuration file.** Create a file named `terraform.tfvars` and add your GCP project ID.
+
+   ```hcl
+   # terraform.tfvars
+   gcp_project_id = "your-gcp-project-id"
+   ```
+
+3. **Initialize Terraform.** This downloads the necessary providers.
+
+   ```bash
+   terraform init
+   ```
+
+4. **Apply the configuration.** This will create the GKE cluster and deploy Argo CD onto it. This process can take 10-15 minutes.
+
+   ```bash
+   terraform apply -auto-approve
+   ```
+
+5. **Connect `kubectl` to Your New Cluster.** After the `apply` command finishes, Terraform will display outputs. Copy the `gke_connect_command` and run it in your terminal.
+
+   ```bash
+   # Example output from Terraform:
+   # gke_connect_command = "gcloud container clusters get-credentials my-gke-cluster --zone asia-southeast1-a --project your-gcp-project-id"
+
+   # Run the command provided in your terminal output
+   gcloud container clusters get-credentials ...
+   ```
+
+
 
 
 ## Create GKE Cluster
