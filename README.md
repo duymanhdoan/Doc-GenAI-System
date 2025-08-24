@@ -1,36 +1,7 @@
 # DOC-GENAI-SYSTEM-ON-K8S
 
 ## I. System Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     External Users                              │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │ HTTP/HTTPS
-┌─────────────────────▼───────────────────────────────────────────┐
-│              NGINX Ingress Controller                           │
-│                 (34.142.154.59.nip.io)                         │
-└─┬────────────┬──────────────┬──────────────┬───────────────────┘
-  │            │              │              │
-┌─▼──────────┐ │            ┌─▼────────────┐ │
-│LOGS        │ │            │TRACES        │ │
-│/kibana     │ │            │/jaeger       │ │
-└────────────┘ │            └──────────────┘ │
-┌─▼──────────┐ │            ┌─▼────────────┐ │
-│METRICS     │ │            │APPLICATION   │ │
-│/grafana    │ │            │/ocr-app      │ │
-└────────────┘ │            └──────────────┘ │
-                │
-      ┌─────────▼─────────┐
-      │   Three Pillars   │
-      │   Observability   │
-      └───────────────────┘
-        │         │        │
-    ┌───▼───┐ ┌───▼───┐ ┌──▼──┐
-    │ LOGS  │ │METRICS│ │TRACE│
-    │ ELK   │ │Prom   │ │Jaeger│
-    └───────┘ └───────┘ └─────┘
-```
+![](images/architectures.jpeg)
 
 ## II. **Technology Stack**
 
@@ -81,74 +52,9 @@ Doc-GenAI-System/
 
 ## IV. Table of Contents
 
-This repository provides **two deployment approaches**:
-
-### **Option A: GitOps Deployment Steps**
 
 
-## 1A. GitOps: Provision GKE + ArgoCD
-
-### Prerequisites
-```bash
-# Install tools  
-gcloud auth login
-conda env create -f Iac/environment_ansible.yml -n deploy_system
-conda activate deploy_system
-```
-
-### Deploy Infrastructure with ArgoCD
-```bash
-cd Iac/terraform
-terraform init
-terraform plan
-terraform apply -auto-approve
-
-# Connect to cluster (replace with your values)
-gcloud container clusters get-credentials dev-cluster \
-    --zone asia-southeast1-a --project YOUR_PROJECT_ID
-
-# Verify ArgoCD is installed
-kubectl get pods -n argo-cd
-```
-
----
-
-## 2A. GitOps: Deploy via App of Apps
-
-```bash
-cd ../argo-apps
-
-# Configure environment in values.yaml
-# Set: domain, external IP, credentials
-
-# Bootstrap entire platform
-helm install argo-apps . -n argo-cd
-
-# Access ArgoCD UI (get password)
-kubectl -n argo-cd get secret argocd-initial-admin-secret \
-    -o jsonpath="{.data.password}" | base64 -d
-
-# All apps will sync: traefik, cert-manager, loki, grafana, etc.
-```
-
----
-
-## 3A. Verify GitOps System
-
-```bash
-# Check ArgoCD applications
-kubectl get applications -n argo-cd
-
-# Verify all pods are running
-kubectl get pods --all-namespaces
-
-# Check application sync status in ArgoCD UI
-# Expected: All applications in 'Synced' and 'Healthy' state
-```
-
----
-
-## 1B. Create GKE Cluster
+## Create GKE Cluster
 
 ### Prerequisites
 ```bash
@@ -169,13 +75,8 @@ terraform apply -auto-approve
 gcloud container clusters get-credentials dev-cluster \
     --zone asia-southeast1-a --project YOUR_PROJECT_ID
 
-# Verify
-kubectl get nodes
-```
 
----
-
-## 2B. Deploy NGINX Ingress Controller
+## Deploy NGINX Ingress Controller
 
 ```bash
 cd ../../helm-charts/
@@ -185,16 +86,13 @@ helm upgrade --install nginx-ingress-controller ./ingress-nginx-app/ \
 # Wait for external IP
 kubectl get svc -n ingress-nginx --watch
 
-# Configure host (replace with your external IP)
-export EXTERNAL_HOST="34.142.154.59.nip.io"
-echo "34.142.154.59 34.142.154.59.nip.io" | sudo tee -a /etc/hosts
-```
 
----
-
-## 3B. Deploy Observability Platform
+## Deploy Observability Platform
 
 ```bash
+# copy your external IP of ingress-nginx then update EXTERNAL_HOST varible in ./deploy.sh 
+EXTERNAL_HOST = "your_external_ip"
+
 # Deploy all three monitoring workflows
 ./deploy.sh all
 
@@ -206,7 +104,7 @@ echo "34.142.154.59 34.142.154.59.nip.io" | sudo tee -a /etc/hosts
 
 ---
 
-## 4B. Deploy ML Application
+## Deploy ML Application
 
 ```bash
 # Deploy OCR service
@@ -216,7 +114,7 @@ helm upgrade --install ocr-app ./ocr-app/ \
 
 ---
 
-## 5B. Verify Direct System
+## Verify Direct System
 
 ```bash
 # Check all deployments
@@ -295,7 +193,7 @@ helm uninstall nginx-ingress-controller -n ingress-nginx
 
 ---
 
-## 8. Uninstallation
+## Uninstallation
 
 ### For GitOps ArgoCD Deployment (Option A)
 

@@ -10,7 +10,7 @@ def predict():
     logger.info("Sending POST request to OCR API...")
     
     # Check if image file exists
-    image_path = "./examples/receipt.jpg"
+    image_path = "./images/receipt.jpg"
     if not os.path.exists(image_path):
         logger.error(f"Image file not found: {image_path}")
         return None
