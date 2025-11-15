@@ -5,6 +5,27 @@ __pycache__/
 
 # C extensions
 *.so
+### helm chart 
+helm-charts/monitoring-stack/charts/*.tgz
+helm-charts/monitoring-stack/Chart.lock
+
+
+# history work folders with claude 
+comprehensive_documentation/
+doc_genai_system.egg-info/* 
+bin-file/*
+.claude/ 
+.serena/ 
+
+# Terraform file 
+Iac/terraform/trash/ 
+Iac/terraform/.terraform 
+Iac/terraform/.terraform.lock.hcl
+Iac/terraform/terraform.tfstate
+Iac/terraform/terraform.tfstate.backup
+
+Iac/terraform/plan.tfplan
+Iac/terraform/.terraform.tfstate.lock.info
 
 # Distribution / packaging
 .Python
@@ -12,10 +33,7 @@ build/
 develop-eggs/
 dist/
 downloads/
-<<<<<<< HEAD
 bin-yaml-file/
-=======
->>>>>>> cfe0b5b (Initial commit)
 eggs/
 .eggs/
 lib/

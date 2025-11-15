@@ -1,0 +1,170 @@
+# PROMETHEUS DEPLOYMENT - METRICS COLLECTION PILLAR
+# =================================================
+# Central time-series metrics collection and storage system for the observability platform
+#
+# ROLE IN OBSERVABILITY:
+# - METRICS PILLAR: Core component for time-series data collection
+# - Scrapes metrics from: OCR service, Node Exporter, cAdvisor, Kubernetes API
+# - Provides data source for Grafana dashboards and AlertManager rules
+# - Implements pull-based metrics collection model
+#
+# DEPLOYMENT ARCHITECTURE:
+# - Single replica deployment (suitable for development/small environments)
+# - Persistent storage for metrics data retention
+# - RBAC permissions for Kubernetes service discovery
+# - Init container for proper filesystem permissions
+#
+# INTEGRATION POINTS:
+# - Grafana queries Prometheus for dashboard data
+# - AlertManager receives alert rules from Prometheus
+# - Service discovery automatically finds metrics targets
+# - OCR service exposes /metrics endpoint for scraping
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "prometheus.fullname" . }}
+  namespace: {{ .Values.global.namespace | default .Release.Namespace | default "observability" }}
+  labels:
+    {{- include "prometheus.labels" . | nindent 4 }}
+    {{- with .Values.global.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    observability.flow: metrics
+    observability.component: storage
+    # Additional labels for observability platform integration
+    observability.platform/component: "metrics-collection"
+    observability.platform/pillar: "metrics"
+spec:
+  # SINGLE REPLICA STRATEGY
+  # =====================
+  # For production environments, consider Prometheus HA setup with multiple replicas
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "prometheus.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "prometheus.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Force pod restart on config changes
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      # POD SECURITY CONTEXT
+      # ===================
+      securityContext:
+        fsGroup: 65534  # File system group for volume access
+        
+      # SERVICE ACCOUNT FOR KUBERNETES API ACCESS
+      # ========================================
+      # Required for service discovery and metrics scraping from Kubernetes resources
+      serviceAccountName: {{ include "prometheus.fullname" . }}
+      
+      # INIT CONTAINER FOR FILESYSTEM PREPARATION
+      # ========================================
+      # Ensures proper permissions for Prometheus data directory
+      initContainers:
+      - name: fix-permissions
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          # FILESYSTEM PERMISSIONS SETUP
+          # ===========================
+          # Prometheus runs as user 65534 (nobody) for security
+          # Init container ensures data directory has correct ownership
+          chown -R 65534:65534 /prometheus
+          chmod -R 755 /prometheus
+          echo "Permissions fixed for Prometheus data directory"
+        securityContext:
+          runAsUser: 0  # Run as root to change ownership
+        volumeMounts:
+        - name: prometheus-data
+          mountPath: /prometheus
+          
+      # MAIN PROMETHEUS CONTAINER
+      # ========================
+      containers:
+      - name: prometheus
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        
+        # PROMETHEUS STARTUP ARGUMENTS
+        # ===========================
+        # Configuration for metrics collection, storage, and web interface
+        args:
+          - '--config.file=/etc/prometheus/prometheus.yml'              # Main configuration file
+          - '--storage.tsdb.path=/prometheus'                           # Time-series database path
+          - '--web.console.libraries=/etc/prometheus/console_libraries' # Web console libraries
+          - '--web.console.templates=/etc/prometheus/consoles'          # Web console templates
+          - '--storage.tsdb.retention.time={{ .Values.config.retention }}' # Data retention period
+          - '--web.enable-lifecycle'                                    # Enable config reload via API
+          
+        # SECURITY CONTEXT
+        # ===============
+        # Run as non-root user for security hardening
+        securityContext: 
+          runAsUser: 65534       # nobody user
+          runAsGroup: 65534      # nobody group  
+          runAsNonRoot: true     # Enforce non-root execution
+        # NETWORK CONFIGURATION
+        # ====================
+        ports:
+        - containerPort: 9090    # Prometheus web UI and API port
+          name: http
+          protocol: TCP
+          
+        # RESOURCE MANAGEMENT
+        # ==================
+        # CPU and memory limits/requests from values.yaml
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+          
+        # HEALTH CHECKS
+        # ============
+        livenessProbe:
+          httpGet:
+            path: /-/healthy     # Prometheus health endpoint
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          
+        readinessProbe:
+          httpGet:
+            path: /-/ready       # Prometheus readiness endpoint
+            port: 9090
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          
+        # VOLUME MOUNTS
+        # ============
+        volumeMounts:
+        - name: config-volume      # Prometheus configuration
+          mountPath: /etc/prometheus
+          readOnly: true
+        - name: prometheus-data    # Time-series data storage
+          mountPath: /prometheus
+          
+      # VOLUME DEFINITIONS
+      # =================
+      volumes:
+      - name: config-volume
+        configMap:
+          name: {{ include "prometheus.fullname" . }}-config
+          # Configuration includes: scrape targets, alerting rules, recording rules
+          
+      - name: prometheus-data
+        {{- if .Values.persistence.enabled }}
+        # PERSISTENT STORAGE
+        # =================
+        # Ensures metrics data survives pod restarts and rescheduling
+        persistentVolumeClaim:
+          claimName: {{ include "prometheus.fullname" . }}-data
+        {{- else }}
+        # EPHEMERAL STORAGE
+        # ================
+        # For development/testing - data lost on pod restart
+        emptyDir: {}
+        {{- end }}

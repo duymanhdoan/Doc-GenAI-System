@@ -1,0 +1,76 @@
+global:
+  # Default namespaces for components
+  ApplicationsNamespace: model-serving
+
+replicaCount: 1
+image:
+  repository: "docker.io/manhduyatsd/ocr-app-trace"
+  tag: "0.0.8"
+  pullPolicy: IfNotPresent
+service:
+  type: ClusterIP
+env:
+  - name: MODEL_PATH
+    value: ./my_model/
+  - name: JAEGER_AGENT_HOST
+    value: "jaeger.tracing.svc.cluster.local"
+  - name: JAEGER_AGENT_PORT
+    value: "6831"
+  - name: JAEGER_SERVICE_NAME
+    value: "ocr-service"
+  - name: OTEL_SERVICE_NAME
+    value: "ocr-service"
+# It's recommended to uncomment and adjust these for production deployments.
+resources: {}
+# limits:
+#   cpu: 200m
+#   memory: 256Mi
+# requests:
+#   cpu: 100m
+#   memory: 128Mi
+
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 3
+readinessProbe:
+  enabled: false
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+podMonitor:
+  enabled: false
+  labels:
+    release: prometheus
+  interval: 15s
+  scrapeTimeout: 10s
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    # SSL Configuration
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    
+    # File upload limits for OCR images
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/client-max-body-size: "50m"
+    
+    # Timeout settings for OCR processing
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    
+    # Rewrite configuration - pass through paths as-is
+    nginx.ingress.kubernetes.io/use-regex: "true"
+  hosts:
+    - host: "34.142.154.59.nip.io"  # "34.142.154.84.nip.io"
+      paths:
+        # OCR app endpoints with /ocr-app prefix
+        - path: /ocr-app
+          pathType: Prefix
+          port: 8000
+  tls: []

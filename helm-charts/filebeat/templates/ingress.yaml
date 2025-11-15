@@ -1,0 +1,41 @@
+{{/*
+FILEBEAT INGRESS TEMPLATE
+========================
+Provides external HTTP access to Filebeat monitoring endpoint for LOGS monitoring flow
+Maps parent chart global configuration to filebeat-specific ingress rules
+*/}}
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "filebeat.fullname" . }}-ingress
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "filebeat.labels" . | nindent 4 }}
+    {{- with .Values.global.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    app.kubernetes.io/component: ingress
+    observability.flow: logs
+    observability.component: collector
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  rules:
+  - host: {{ .Values.global.externalHost | default .Values.ingress.host }}
+    http:
+      paths:
+      {{- range .Values.ingress.paths }}
+      - path: {{ .path }}
+        pathType: {{ .pathType }}
+        backend:
+          service:
+            name: {{ include "filebeat.fullname" $ }}
+            port:
+              number: {{ .backend.service.port.number }}
+      {{- end }}
+{{- end }}

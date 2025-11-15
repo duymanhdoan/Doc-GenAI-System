@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "filebeat.fullname" . }}-config
+  labels:
+    {{- include "filebeat.labels" . | nindent 4 }}
+data:
+  filebeat.yml: |-
+    filebeat.autodiscover:
+      providers:
+        - type: kubernetes
+          node: ${NODE_NAME}
+          hints.enabled: true
+          hints.default_config:
+            type: container
+            paths:
+              - /var/log/containers/*${data.kubernetes.container.id}.log
+          templates:
+            - condition:
+                contains:
+                  kubernetes.namespace: "model-serving"
+              config:
+                - type: container
+                  paths:
+                    - /var/log/containers/*${data.kubernetes.container.id}.log
+                  processors:
+                    - add_kubernetes_metadata:
+                        host: ${NODE_NAME}
+                        matchers:
+                        - logs_path:
+                            logs_path: "/var/log/containers/"
+                    - decode_json_fields:
+                        fields: ["message"]
+                        target: ""
+                        overwrite_keys: true
+                    - add_labels:
+                        labels:
+                          log_type: "application"
+                          service: "ocr-app"
+            - condition:
+                not:
+                  contains:
+                    kubernetes.namespace: "model-serving"
+              config:
+                - type: container
+                  paths:
+                    - /var/log/containers/*${data.kubernetes.container.id}.log
+                  processors:
+                    - add_kubernetes_metadata:
+                        host: ${NODE_NAME}
+                        matchers:
+                        - logs_path:
+                            logs_path: "/var/log/containers/"
+
+    processors:
+      - add_cloud_metadata: {}
+      - add_host_metadata: {}
+      - add_docker_metadata: {}
+
+    output.elasticsearch:
+      hosts: ['{{ .Values.config.elasticsearchHost }}']
+      template.settings:
+        index.number_of_shards: 1
+        index.number_of_replicas: 0
+      
+    logging.level: {{ .Values.config.logLevel }}
+    logging.to_files: true
+    logging.files:
+      path: /var/log/filebeat
+      name: filebeat
+      keepfiles: 7
+      permissions: 0644
+      
+    monitoring.enabled: false

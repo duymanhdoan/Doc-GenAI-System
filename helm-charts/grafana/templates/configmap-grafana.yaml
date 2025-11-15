@@ -1,0 +1,62 @@
+---
+# Grafana Dashboards Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "grafana.fullname" . }}-dashboards
+  namespace: {{ .Values.global.namespace | default "observability" }}
+  labels:
+    {{- include "grafana.labels" . | nindent 4 }}
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+    - name: 'default'
+      orgId: 1
+      folder: ''
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /opt/grafana/dashboards
+
+---
+# Grafana Datasources Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "grafana.fullname" . }}-datasources
+  namespace: {{ .Values.global.namespace | default "observability" }}
+  labels:
+    {{- include "grafana.labels" . | nindent 4 }}
+data:
+  datasource.yaml: |
+    apiVersion: 1
+    deleteDatasources:
+      - name: Prometheus
+        orgId: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: {{ .Values.datasources.prometheus.url }}
+        isDefault: {{ .Values.datasources.prometheus.isDefault }}
+
+---
+# Grafana Dashboard Files
+{{- if .Values.dashboards.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "grafana.fullname" . }}-dashboard-files
+  namespace: {{ .Values.global.namespace | default "observability" }}
+  labels:
+    {{- include "grafana.labels" . | nindent 4 }}
+data:
+{{- $files := .Files }}
+{{- range $path, $fileContents := $files.Glob "dashboards/*.json" }}
+  {{ base $path }}: |-
+{{ $files.Get $path | indent 4 }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,163 @@
+# NGINX INGRESS CONTROLLER DEPLOYMENT
+# ===================================
+# Central load balancer and reverse proxy for the entire observability platform
+#
+# ROLE IN PLATFORM ARCHITECTURE:
+# - Entry point for all external traffic to observability services
+# - Path-based routing to different services (OCR, Grafana, Prometheus, etc.)
+# - SSL termination and certificate management
+# - Load balancing and high availability
+#
+# INTEGRATION WITH OBSERVABILITY SERVICES:
+# - Routes /ocr-app/* to OCR service in model-serving namespace
+# - Routes /grafana/* to Grafana dashboards in observability namespace
+# - Routes /prometheus/* to Prometheus UI in observability namespace
+# - Routes /jaeger/* to distributed tracing UI in observability namespace
+# - Routes /kibana/* to log analysis UI in logging namespace
+#
+# CONTROLLER ARCHITECTURE:
+# - NGINX-based reverse proxy with Kubernetes integration
+# - Dynamic configuration via Ingress resources
+# - Real-time configuration updates without service interruption
+# - Built-in metrics for monitoring ingress performance
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.controller.name }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.controller.name }}
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    # Additional labels for observability platform integration
+    observability.platform/component: "ingress-controller"
+    observability.platform/role: "traffic-management"
+spec:
+  # REPLICA CONFIGURATION
+  # ====================
+  # Single replica suitable for development; use multiple replicas for HA in production
+  replicas: {{ .Values.controller.replicas }}
+  
+  # POD SELECTION STRATEGY
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.controller.name }}
+      app.kubernetes.io/component: controller
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  # POD TEMPLATE SPECIFICATION
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.controller.name }}
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        # Prometheus metrics scraping configuration
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.controller.containerPorts.metrics }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      # SERVICE ACCOUNT FOR KUBERNETES API ACCESS
+      # ========================================
+      # Required permissions for:
+      # - Reading Ingress resources across namespaces
+      # - Updating Ingress status with LoadBalancer IP
+      # - Service discovery and endpoint management
+      serviceAccountName: {{ .Values.controller.serviceAccount.name }}
+      
+      # NGINX INGRESS CONTROLLER CONTAINER
+      # =================================
+      containers:
+      - name: controller
+        image: "{{ .Values.controller.image.repository }}:{{ .Values.controller.image.tag }}"
+        imagePullPolicy: {{ .Values.controller.image.pullPolicy }}
+        
+        # CONTROLLER STARTUP ARGUMENTS
+        # ===========================
+        # These arguments configure the NGINX Ingress Controller behavior
+        args:
+          - /nginx-ingress-controller                                                    # Controller binary
+          - --configmap={{ .Values.namespace.name }}/{{ .Values.controller.args.configmap }}              # Global NGINX configuration
+          - --tcp-services-configmap={{ .Values.namespace.name }}/{{ index .Values.controller.args "tcp-services-configmap" }}   # TCP service mappings
+          - --udp-services-configmap={{ .Values.namespace.name }}/{{ index .Values.controller.args "udp-services-configmap" }}   # UDP service mappings  
+          - --publish-service={{ .Values.namespace.name }}/{{ .Values.controller.service.name }}          # LoadBalancer service reference
+          - --annotations-prefix={{ index .Values.controller.args "annotations-prefix" }}                  # Ingress annotation prefix
+        
+        # ENVIRONMENT VARIABLES
+        # ====================
+        # Pod metadata injection for controller self-identification
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name      # Inject pod name for logging and metrics
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace # Inject namespace for service discovery
+              
+        # CONTAINER PORTS
+        # ==============
+        # Network ports exposed by the NGINX Ingress Controller
+        ports:
+        - containerPort: {{ .Values.controller.containerPorts.http }}    # HTTP traffic (80)
+          name: http
+          protocol: TCP
+        - containerPort: {{ .Values.controller.containerPorts.https }}   # HTTPS traffic (443)  
+          name: https
+          protocol: TCP
+        - containerPort: {{ .Values.controller.containerPorts.metrics }} # Prometheus metrics (10254)
+          name: metrics
+          protocol: TCP
+          
+        # RESOURCE MANAGEMENT
+        # ==================
+        # CPU and memory limits/requests for ingress controller performance
+        resources:
+          {{- toYaml .Values.controller.resources | nindent 10 }}
+          
+        # LIVENESS PROBE
+        # =============
+        # Ensures controller is running and can process traffic
+        {{- if .Values.controller.livenessProbe.enabled }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.controller.livenessProbe.path }}    # /healthz endpoint
+            port: {{ .Values.controller.livenessProbe.port }}    # Metrics port (10254)
+            scheme: HTTP
+          initialDelaySeconds: {{ .Values.controller.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.controller.livenessProbe.periodSeconds }}
+          timeoutSeconds: 5
+          failureThreshold: 3
+        {{- end }}
+        
+        # READINESS PROBE  
+        # ==============
+        # Determines when controller is ready to receive traffic
+        {{- if .Values.controller.readinessProbe.enabled }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.controller.readinessProbe.path }}    # /healthz endpoint
+            port: {{ .Values.controller.readinessProbe.port }}    # Metrics port (10254)
+            scheme: HTTP
+          initialDelaySeconds: {{ .Values.controller.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.controller.readinessProbe.periodSeconds }}
+          timeoutSeconds: 3
+          failureThreshold: 3
+        {{- end }}
+        
+        # SECURITY CONTEXT
+        # ===============
+        # Security settings for the ingress controller container
+        securityContext:
+          runAsUser: 101              # nginx user
+          runAsGroup: 101             # nginx group
+          runAsNonRoot: true          # Enforce non-root execution
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - NET_BIND_SERVICE        # Allow binding to ports < 1024

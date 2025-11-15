@@ -1,0 +1,2 @@
+# Namespace creation is handled by Helm's --create-namespace flag
+# This ensures proper Helm metadata is set automatically

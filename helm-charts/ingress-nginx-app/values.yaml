@@ -1,0 +1,251 @@
+# =============================================
+# NGINX INGRESS CONTROLLER VALUES CONFIGURATION
+# =============================================
+# Comprehensive configuration for the NGINX Ingress Controller serving as the
+# primary entry point for the entire observability platform.
+#
+# PLATFORM INTEGRATION OVERVIEW:
+# - Routes external traffic to OCR service in model-serving namespace
+# - Provides access to Grafana dashboards for metrics visualization
+# - Exposes Prometheus UI for metrics querying and alerting
+# - Routes to Jaeger UI for distributed tracing analysis
+# - Enables access to Kibana for centralized log analysis
+#
+# LOAD BALANCER ARCHITECTURE:
+# - Single external IP for all services
+# - Path-based routing with intelligent rewriting rules
+# - Support for large file uploads (OCR image processing)
+# - Optimized timeouts for different service types
+
+# Global configuration
+global:
+  namespace: ingress-nginx
+
+# NAMESPACE MANAGEMENT
+# ===================
+# Dedicated namespace isolation for ingress controller
+# Note: Namespace creation is handled by Helm's --create-namespace flag
+# This ensures proper Helm metadata is automatically applied
+namespace:
+  create: true                  # Disabled - use --create-namespace flag instead
+  name: ingress-nginx            # Namespace for ingress controller resources
+  labels:
+    name: ingress-nginx
+    purpose: "ingress-traffic-management"
+    observability.platform/component: "traffic-gateway"
+
+# INGRESS CLASS CONFIGURATION
+# ===========================
+# Defines the IngressClass that Ingress resources will reference
+ingressClass:
+  name: nginx                     # IngressClass name (referenced by Ingress resources)
+  isDefault: true                 # Make this the default IngressClass for the cluster
+  controller: k8s.io/ingress-nginx # Controller identifier
+  annotations: {}                 # Additional annotations for IngressClass
+
+# NGINX CONTROLLER CONFIGURATION
+# ==============================
+# Core ingress controller deployment settings
+controller:
+  name: nginx-ingress-controller  # Deployment name
+  replicas: 1                     # Single replica (use 2+ for HA in production)
+  
+  # CONTAINER IMAGE CONFIGURATION
+  # =============================
+  image:
+    repository: registry.k8s.io/ingress-nginx/controller  # Official NGINX Ingress image
+    tag: "v1.10.0"                                        # Stable version with security updates
+    pullPolicy: IfNotPresent                              # Cache images locally
+
+  # SERVICE ACCOUNT CONFIGURATION
+  # ============================
+  # Required RBAC permissions for Kubernetes API access
+  serviceAccount:
+    create: true                                          # Create service account
+    name: nginx-ingress-controller                        # Service account name
+    annotations: {}                                       # Additional annotations (e.g., for cloud IAM)
+
+  # LOAD BALANCER SERVICE CONFIGURATION
+  # ==================================
+  # Exposes ingress controller via external LoadBalancer
+  service:
+    name: nginx-ingress-controller                        # Service name
+    type: LoadBalancer                                    # Request external IP from cloud provider
+    annotations: {}                                       # Cloud-specific annotations (e.g., AWS/GCP)
+    loadBalancerSourceRanges: []                         # IP whitelist (empty = allow all)
+    ports:
+      http: 80                                            # Standard HTTP port
+      https: 443                                          # Standard HTTPS port
+
+  # RESOURCE ALLOCATION
+  # ==================
+  # CPU/Memory limits for ingress controller performance
+  resources:
+    limits:
+      cpu: 100m                                           # Maximum CPU usage
+      memory: 128Mi                                       # Maximum memory usage
+    requests:
+      cpu: 50m                                            # Guaranteed CPU allocation
+      memory: 64Mi                                        # Guaranteed memory allocation
+
+  # CONTAINER NETWORK PORTS
+  # =======================
+  # Ports exposed by the ingress controller container
+  containerPorts:
+    http: 80                                              # HTTP traffic port
+    https: 443                                            # HTTPS traffic port  
+    metrics: 10254                                        # Prometheus metrics port
+
+  # HEALTH CHECK CONFIGURATION
+  # ==========================
+  # Kubernetes probes for container health monitoring
+  livenessProbe:
+    enabled: true                        # Enable liveness checks
+    path: /healthz                       # Health check endpoint
+    port: 10254                          # Metrics/admin port
+    initialDelaySeconds: 30              # Wait before first check
+    periodSeconds: 10                    # Check interval
+
+  readinessProbe:
+    enabled: true                        # Enable readiness checks
+    path: /healthz                       # Readiness check endpoint
+    port: 10254                          # Metrics/admin port
+    initialDelaySeconds: 5               # Quick readiness check
+    periodSeconds: 5                     # Frequent readiness checks
+
+  # NGINX GLOBAL CONFIGURATION
+  # =========================
+  # Global NGINX settings applied to all virtual hosts
+  config:
+    use-forwarded-headers: "true"        # Preserve original client IP headers
+    compute-full-forwarded-for: "true"   # Compute X-Forwarded-For header
+    use-proxy-protocol: "false"          # Disable proxy protocol (not needed for cloud LB)
+    
+    # OBSERVABILITY PLATFORM SPECIFIC SETTINGS
+    # ========================================
+    # Optimized for OCR service and monitoring tools
+    client-max-body-size: "50m"          # Large files for OCR image uploads
+    proxy-read-timeout: "300"            # Extended timeout for OCR processing
+    proxy-send-timeout: "300"            # Extended timeout for large responses
+    proxy-connect-timeout: "60"          # Connection timeout
+    
+    # PERFORMANCE OPTIMIZATIONS
+    # ========================
+    worker-processes: "auto"             # Auto-detect CPU cores
+    worker-connections: "1024"           # Connections per worker
+    keepalive-timeout: "65"              # Keep-alive timeout
+    gzip-compression-level: "6"          # Compress responses
+
+  # PROMETHEUS METRICS INTEGRATION  
+  # =============================
+  # Enable metrics collection for observability platform
+  metrics:
+    enabled: true                        # Enable metrics endpoint
+    service:
+      type: ClusterIP                    # Internal metrics service
+      annotations:
+        prometheus.io/scrape: "true"     # Enable Prometheus scraping
+        prometheus.io/port: "10254"      # Metrics port
+        prometheus.io/path: "/metrics"   # Metrics endpoint path
+
+  # CONTROLLER STARTUP ARGUMENTS
+  # ===========================
+  # Command-line arguments for the NGINX Ingress Controller
+  args:
+    configmap: "nginx-configuration"                      # Global configuration ConfigMap
+    tcp-services-configmap: "tcp-services"               # TCP service mappings
+    udp-services-configmap: "udp-services"               # UDP service mappings  
+    publish-service: ""                                   # Will be templated as namespace/service-name
+    annotations-prefix: "nginx.ingress.kubernetes.io"    # Annotation prefix for Ingress resources
+
+# RBAC configuration
+rbac:
+  create: true
+  clusterRole:
+    name: nginx-ingress-controller
+  clusterRoleBinding:
+    name: nginx-ingress-controller
+
+# Admission Webhooks configuration
+admissionWebhooks:
+  enabled: true
+  patch:
+    enabled: true
+    image:
+      repository: registry.k8s.io/ingress-nginx/kube-webhook-certgen
+      tag: "v20231011-8b53cabe0"
+
+# ============================================
+# OBSERVABILITY PLATFORM INGRESS ROUTING CONFIGURATION
+# ============================================
+# This section defines the ingress routing configuration for all observability
+# services, implementing path-based routing to the three pillars of observability.
+#
+# ROUTING ARCHITECTURE:
+# - Single external IP/domain for all observability services
+# - Path-based routing with service-specific configurations
+# - Namespace-aware ingress resources for proper RBAC isolation
+# - Optimized settings for different service types (dashboards, APIs, UIs)
+
+monitoring:
+  enabled: false # Disable monitoring services ingress (keep nginx-app self-contained)
+
+  # OBSERVABILITY NAMESPACE INGRESS
+  # ==============================
+  # Metrics collection and visualization services
+  observability:
+    ingressName: monitoring-ingress      # Ingress resource name
+    namespace: observability             # Target namespace for metrics services
+    annotations:                         # Service-specific annotations
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+
+  # TRACING NAMESPACE INGRESS  
+  # =========================
+  # Distributed tracing services
+  tracing:
+    ingressName: tracing-ingress         # Ingress resource name
+    namespace: tracing                   # Target namespace for tracing services
+    annotations:                         # Tracing-specific annotations
+      nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+
+  # EXTERNAL ACCESS CONFIGURATION
+  # ============================
+  # Host and path-based routing for all observability services
+  hosts:
+    - host: "34.142.154.59.nip.io"       # Primary external domain: "34.142.154.84.nip.io" 
+      paths:
+        # METRICS VISUALIZATION (Pillar #1)
+        # ================================
+        - path: /grafana                 # Grafana dashboard access
+          service: grafana               # Grafana service name
+          port: 3000                     # Grafana web port
+          description: "Metrics visualization and dashboards"
+          
+        # METRICS COLLECTION (Pillar #1)  
+        # =============================
+        - path: /prometheus              # Prometheus UI and API
+          service: prometheus            # Prometheus service name
+          port: 9090                     # Prometheus web port
+          description: "Time-series metrics database and query engine"
+
+        # ALERTING AND NOTIFICATIONS (Pillar #1)
+        # ====================================
+        - path: /alertmanager            # AlertManager UI
+          service: alertmanager          # AlertManager service name
+          port: 9093                     # AlertManager web port
+          description: "Alert routing and notification management"
+
+        # DISTRIBUTED TRACING (Pillar #3)
+        # ==============================
+        - path: /jaeger                  # Jaeger tracing UI
+          service: jaeger                # Jaeger service name
+          port: 16686                    # Jaeger UI port
+          description: "Distributed tracing analysis and visualization"
+
+        # Note: Logging services (Pillar #2) are configured separately
+        # in the monitoring-stack chart due to namespace isolation
+  
+  # EXTERNAL IP CONFIGURATION
+  # ========================
+  # Should match the LoadBalancer external IP for DNS configuration
+  externalIP: "34.142.154.59"          # LoadBalancer external IP
